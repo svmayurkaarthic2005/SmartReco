@@ -1,18 +1,17 @@
-# SmartReco - Behavioral AI Recommendation Platform
+# SmartReco — Behavioral AI Recommendation Agent
 
-A production-grade behavioral AI recommendation system for online learning marketplaces, powered by a **LangGraph multi-agent architecture**, **vector similarity retrieval**, and **real-time event telemetry**.
-
----
-
-## 🚀 Overview
-
-**SmartReco** is an intelligent e-learning recommendation platform that turns user behavioral signals (page views, course enrollments, category browsing, search queries, and dwell times) into personalized learning journeys. 
-
-The system features a **6-agent LangGraph execution graph** that classifies learners into behavioral personas, constructs semantic vector search queries, ranks course candidates using multi-factor scoring, and generates tailored learning roadmaps with LLM narratives.
+> **Built for the Krish Naik Academy SmartReco Build Challenge 2026**  
+> *Powered by **Mesh API** (Mandatory LLM Gateway) and **LangGraph Multi-Agent Architecture***
 
 ---
 
-## 🏗️ Architecture & Monorepo Layout
+## 🏆 Hackathon Overview
+
+**SmartReco** is an intelligent e-learning recommendation platform built for the **SmartReco Build Challenge 2026**. It continuously observes user behavioral activity (page views, course enrollments, category browsing, search queries, scroll depth, and dwell time), understands user intent via a 6-agent reasoning pipeline, retrieves catalog-grounded courses via vector RAG, and generates persuasive personalized learning roadmaps.
+
+---
+
+## 🎯 Architecture & System Design
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────────────────┐
@@ -39,130 +38,101 @@ The system features a **6-agent LangGraph execution graph** that classifies lear
 
 ---
 
-## 📚 Rich Multi-Domain Course Catalog (95+ Courses)
+## ⭐ Key Challenge Requirements & Implementations
 
-SmartReco includes 95+ courses spanning 10 technology domains:
-1. **AI/ML & LLM Agents** (10 courses) — PyTorch, Transformers, LangChain, Autonomous Agents, Prompt Fine-Tuning.
-2. **Web Development** (10 courses) — React 18, Next.js 14, Node.js Microservices, Vue 3, GraphQL, WebSockets.
-3. **Cyber Security & Ethical Hacking** (10 courses) — OWASP Top 10, Cloud Security, Ghidra Malware Analysis, DevSecOps.
-4. **Blockchain & Web3** (10 courses) — Solidity, DeFi Protocols, Solana Rust, Zero-Knowledge zk-SNARKs, NFT Platforms.
-5. **Mobile Development** (10 courses) — React Native, Flutter 3, iOS Swift, Android Kotlin Compose, KMP.
-6. **System Design & Architecture** (10 courses) — High-Scale Design, Go Distributed Systems, Microservices Patterns, DB Internals.
-7. **Data Science & Big Data** (10 courses) — Apache Spark, SQL Analytics, Snowflake, Airflow Orchestration, Kafka Streaming.
-8. **Cloud Computing** (10 courses) — AWS Solutions Architect, Kubernetes, Azure DevOps, GCP, Terraform, Serverless.
-9. **DevOps & SRE** (10 courses) — CI/CD Pipelines, Prometheus/Grafana, Ansible, GitOps ArgoCD, Service Mesh Istio.
-10. **UI/UX & Product Design** (5 courses) — Figma Prototyping, Design Systems, Motion Graphics, WCAG Accessibility.
+### 1. Web Platform Foundation
+- **Role-Based Auth**: Simple JWT Bearer authentication with regular user (browsing, recommendations) and admin (product catalog management) roles.
+- **Relational Data Model**: PostgreSQL schema connecting `User`, `Product`, `Event`, `Recommendation`, and `RecommendationCache`.
+
+### 2. Dual-Write Product Management
+- **SQL & Vector Store Sync**: Admin product operations (`POST /products` & `DELETE /products/{id}`) write to PostgreSQL and generate embeddings indexed into **ChromaDB Vector DB** simultaneously.
+
+### 3. Non-Blocking Behavioral Event Tracking
+- **Asynchronous Telemetry**: React tracking hooks ([useTracker.ts](file:///c:/proj/SmartReco/smartreco/frontend/src/tracker/useTracker.ts)) track page views, searches, course views, scroll depths, and dwell time.
+- **Batching & Throttling**: High-frequency events are throttled and dispatched via `/events/batch` without blocking UI interactions.
+
+### 4. Agentic Recommendation Engine
+- **Mesh API Mandatory Integration**: All LLM calls route through Mesh API gateway (`https://api.meshapi.ai/v1`) using `openai.AsyncOpenAI`.
+- **ChromaDB RAG Retrieval**: Grounded vector retrieval ensures recommended courses exist in the real database catalog.
+- **Persuasive Narratives**: LLM generates custom learning goals, match explanations, and structured 3-step learning roadmaps.
+- **MD5 Behavioral Hash Caching**: Computes a digital fingerprint over recent events to avoid unnecessary LLM calls and purge cache only when user interests shift.
 
 ---
 
-## 🤖 Agent Workflow & LangGraph Execution
+## 🌟 Implemented Bonus Features
 
-The core recommendation engine executes a stateful **6-agent LangGraph workflow**:
+| Bonus Feature | Implementation Details |
+|---|---|
+| ⭐ **Structured Agent Framework** | Built with **LangGraph** stateful execution graph ([workflow.py](file:///c:/proj/SmartReco/smartreco/backend/app/langgraph/workflow.py)) containing nodes for Behavior Analysis, Persona Classification, Recovery Check, Vector Retrieval, Multi-Factor Ranking, and Narrative Generation. |
+| ⭐ **Scheduled Proactive Delivery** | Background **APScheduler** jobs ([scheduler.py](file:///c:/proj/SmartReco/smartreco/backend/app/scheduler/scheduler.py)) send scheduled email recommendation digests based on user activity. |
+| ⭐ **Observability** | Integrated **LangSmith** end-to-end tracing ([langsmith_client.py](file:///c:/proj/SmartReco/smartreco/backend/app/observability/langsmith_client.py)) to monitor agent execution nodes, prompts, and latencies. |
+| ⭐ **Retrieval Polish** | 6-factor mathematical re-ranking formula combining Semantic Vector Similarity, Difficulty Level Alignment, Learning Progression, Price/Budget Fit, Tag Overlap, Freshness, and Domain Category Boost. |
 
+---
+
+## 📚 Course Catalog (95+ Courses Across 10 Domains)
+
+Pre-seeded dataset with 95+ comprehensive technology courses:
+- **AI/ML & LLM Agents** (10 courses) — LangChain, LangGraph, Transformers, PyTorch, Autonomous Agents.
+- **Web Development** (10 courses) — React 18, Next.js 14 App Router, Node.js Microservices, GraphQL, WebSockets.
+- **Cyber Security & Ethical Hacking** (10 courses) — OWASP Top 10, Cloud Security, Ghidra Malware Analysis, DevSecOps.
+- **Blockchain & Web3** (10 courses) — Solidity, DeFi Protocols, Solana Rust Anchor, zk-SNARKs, NFT Platforms.
+- **Mobile Development** (10 courses) — React Native, Flutter 3, iOS Swift, Android Kotlin Compose, KMP.
+- **System Design & Architecture** (10 courses) — High-Scale System Design, Go Distributed Systems, Microservices, DB Internals.
+- **Data Science & Big Data** (10 courses) — Apache Spark, SQL Analytics, Snowflake, Airflow, Kafka Streaming.
+- **Cloud Computing** (10 courses) — AWS Solutions Architect, Kubernetes, Azure DevOps, GCP, Terraform, Serverless.
+- **DevOps & SRE** (10 courses) — CI/CD Pipelines, Prometheus/Grafana, Ansible, GitOps ArgoCD, Service Mesh Istio.
+- **UI/UX & Product Design** (5 courses) — Figma Prototyping, Design Systems, Motion Graphics, WCAG Accessibility.
+
+---
+
+## 💻 Local Setup & Execution Guide
+
+### 1. Environment Configuration (`backend/.env`)
+```env
+# Database & Redis
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/smartreco
+REDIS_URL=redis://localhost:6379/0
+
+# Mesh API (Mandatory LLM Gateway)
+MESH_API_KEY=your_mesh_api_key_here
+MESH_API_BASE_URL=https://api.meshapi.ai/v1
+MESH_MODEL=openai/gpt-4o
+
+# LangSmith Observability (Optional)
+LANGSMITH_API_KEY=your_langsmith_key
+LANGSMITH_PROJECT=smartreco-hackathon
 ```
-                  ┌──────────────────────┐
-                  │    Behavior Agent    │ (Analyzes interaction history & weighted intent)
-                  └──────────┬───────────┘
-                             │
-                             ▼
-                  ┌──────────────────────┐
-                  │    Persona Agent     │ (Classifies user into 1 of 6 behavioral personas)
-                  └──────────┬───────────┘
-                             │
-                             ▼
-               ┌───────────────────────────┐
-               │    Recovery Agent Check   │ (Conditional Branching)
-               └─────────────┬─────────────┘
-                             │
-             ┌───────────────┴───────────────┐
-             │                               │
-    [Risk / Low Engagement]         [Standard Path]
-             │                               │
-             ▼                               ▼
-  ┌─────────────────────┐         ┌─────────────────────┐
-  │   Recovery Mode     │         │   Retrieval Agent   │ (Hybrid ChromaDB + PostgreSQL fallback)
-  │ (Re-engagement flow)│         └──────────┬───────────┘
-  └─────────────────────┘                    │
-                                             ▼
-                                  ┌─────────────────────┐
-                                  │    Ranking Agent    │ (6-Factor multi-score re-ranking)
-                                  └──────────┬───────────┘
-                                             │
-                                             ▼
-                                  ┌─────────────────────┐
-                                  │   Narrative Agent   │ (Mesh API LLM story & roadmap generation)
-                                  └──────────┬───────────┘
-```
 
----
-
-## 🌐 100% Free Cloud Deployment Guide
-
-You can deploy the complete SmartReco stack **100% FREE** on modern cloud platforms:
-
-### 1. Database & Cache Tier (Free Services)
-- **PostgreSQL Database**: Create a free PostgreSQL database on [Neon.tech](https://neon.tech) or [Supabase](https://supabase.com). Copy the async connection URL (`postgresql+asyncpg://...`).
-- **Redis Cache**: Create a free Redis instance on [Upstash.com](https://upstash.com). Copy the TLS Redis URL (`rediss://...`).
-
-### 2. FastAPI Backend Service (Render.com)
-1. Push your repository to GitHub.
-2. Sign up on [Render.com](https://render.com) (Free Web Service Tier).
-3. Create a **New Web Service** and select your repository.
-4. Set **Root Directory**: `smartreco/backend`.
-5. Set **Build Command**: `pip install -r requirements.txt`.
-6. Set **Start Command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
-7. Environment Variables:
-   - `DATABASE_URL`: Your Neon/Supabase PostgreSQL connection string.
-   - `REDIS_URL`: Your Upstash Redis URL.
-   - `MESH_API_KEY`: Your LLM API Gateway key.
-   - `JWT_SECRET_KEY`: Random 32-character secret key.
-
-### 3. React Frontend Application (Vercel)
-1. Sign up on [Vercel.com](https://vercel.com).
-2. Click **Import Project** and select your GitHub repository.
-3. Set **Framework Preset**: `Vite`.
-4. Set **Root Directory**: `smartreco/frontend`.
-5. Environment Variables:
-   - `VITE_API_BASE_URL`: `https://your-backend.onrender.com` (Your Render Backend URL).
-6. Click **Deploy**. Vercel will build and host your app on global HTTPS CDN for free!
-
----
-
-## 🔌 API Endpoint Reference
-
-| Method | Path | Auth Required | Description |
-|---|---|---|---|
-| `GET` | `/health` | None | System health check (`{"status": "ok", "version": "1.0.0"}`) |
-| `POST` | `/auth/register` | None | Register new user account |
-| `POST` | `/auth/login` | None | Authenticate user and receive JWT bearer token |
-| `GET` | `/auth/me` | User / Admin | Retrieve current user profile |
-| `POST` | `/auth/refresh` | User / Admin | Refresh current JWT access token |
-| `GET` | `/products` | None | Public course catalog search & category filtering |
-| `GET` | `/products/{product_id}` | None | Retrieve course details by ID |
-| `POST` | `/events/batch` | User / Admin | Submit batch of behavioral events (max 50) |
-| `POST` | `/events/single` | User / Admin | Submit single behavioral event |
-| `GET` | `/events/me` | User / Admin | Retrieve recent event history for current user |
-| `GET` | `/events/me/hash` | User / Admin | Compute current behavioral event MD5 hash |
-| `GET` | `/recommendations/me` | User / Admin | Get personalized recommendations, story & roadmap |
-| `POST` | `/recommendations/refresh` | User / Admin | Force refresh recommendation and persona caches |
-| `GET` | `/recommendations/history` | User / Admin | View recommendation history log |
-| `POST` | `/products` | Admin Only | Create course, generate vector embedding & index in ChromaDB |
-| `DELETE` | `/products/{product_id}` | Admin Only | Delete course from PostgreSQL & ChromaDB |
-
----
-
-## 💻 Local Development Setup
-
+### 2. Start PostgreSQL & Redis Services
 ```bash
-# 1. Start PostgreSQL & Redis via Docker
 docker-compose up -d postgres redis
-
-# 2. Seed database with 95+ courses across 10 domains
-cd smartreco/backend && python -m app.database.seed
-
-# 3. Launch Backend Server
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
-# 4. Launch Frontend Server
-cd smartreco/frontend && npm run dev
 ```
+
+### 3. Backend Setup & Database Seeding
+```bash
+cd backend
+pip install -r requirements.txt
+python -m app.database.seed
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### 4. Frontend Setup & Launch
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+---
+
+## 🤖 GitHub Actions Automated Checks
+
+This repository contains the official hackathon automated CI workflow:
+- Workflow Path: `.github/workflows/smartreco-checks.yml`
+
+To enable automated checks on GitHub:
+1. Go to repository **Settings** ➔ **Secrets and variables** ➔ **Actions**.
+2. Add secrets:
+   - `MESH_API_KEY`: Your Mesh API Key (`rsk_...`).
+   - `SUBMISSION_TOKEN`: Your hackathon submission token.

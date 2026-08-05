@@ -1,3 +1,5 @@
+# SmartReco Build Challenge 2026 Submission
+
 # Web framework (FastAPI)
 fastapi==0.109.0
 uvicorn[standard]==0.27.0

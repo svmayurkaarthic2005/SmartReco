@@ -15,15 +15,8 @@ import CourseDetailPage from './pages/CourseDetailPage'
 import ActivityPage from './pages/ActivityPage'
 import RecommendationsPage from './pages/RecommendationsPage'
 
-// Admin
-import AdminLayout from './pages/admin/AdminLayout'
-import AdminDashboardPage from './pages/admin/AdminDashboardPage'
-import AdminProductsPage from './pages/admin/AdminProductsPage'
-import AdminUsersPage from './pages/admin/AdminUsersPage'
-import AdminTracesPage from './pages/admin/AdminTracesPage'
-
 // Components
-import { ProtectedRoute, AdminRoute } from './components/layout/ProtectedRoute'
+import { ProtectedRoute } from './components/layout/ProtectedRoute'
 
 function App() {
   const { isLoading } = useAuthStore()
@@ -53,16 +46,6 @@ function App() {
           <Route path="/courses" element={<CoursesPage />} />
           <Route path="/courses/:id" element={<CourseDetailPage />} />
           <Route path="/activity" element={<ActivityPage />} />
-        </Route>
-
-        {/* Admin routes */}
-        <Route path="/admin" element={<AdminRoute />}>
-          <Route element={<AdminLayout />}>
-            <Route index element={<AdminDashboardPage />} />
-            <Route path="products" element={<AdminProductsPage />} />
-            <Route path="users" element={<AdminUsersPage />} />
-            <Route path="traces" element={<AdminTracesPage />} />
-          </Route>
         </Route>
 
         {/* Default redirect */}

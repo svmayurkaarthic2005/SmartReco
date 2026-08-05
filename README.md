@@ -20,7 +20,7 @@
 │                 Frontend                    │                   Backend                   │
 │          (React 18 + Vite + TS)             │              (FastAPI + Python)            │
 │  ┌───────────────────────────────────────┐  │  ┌───────────────────────────────────────┐  │
-│  │ Learner Dashboard │ Activity Stream   │  │  │ API Layer (Auth, Events, Recs, Admin) │  │
+│  │ Learner Dashboard │ Activity Stream   │  │  │ API Layer (Auth, Events, Recs, Catalog)│  │
 │  │ Course Catalog    │ AI Recommendations│  │  │ LangGraph Multi-Agent Workflow Engine │  │
 │  └───────────────────┬───────────────────┘  │  └───────────────────┬───────────────────┘  │
 └──────────────────────┼──────────────────────┴──────────────────────┼──────────────────────┘
@@ -41,11 +41,11 @@
 ## ⭐ Key Challenge Requirements & Implementations
 
 ### 1. Web Platform Foundation
-- **Role-Based Auth**: Simple JWT Bearer authentication with regular user (browsing, recommendations) and admin (product catalog management) roles.
+- **Authentication**: Simple, secure JWT Bearer authentication for user login and registration.
 - **Relational Data Model**: PostgreSQL schema connecting `User`, `Product`, `Event`, `Recommendation`, and `RecommendationCache`.
 
-### 2. Dual-Write Product Management
-- **SQL & Vector Store Sync**: Admin product operations (`POST /products` & `DELETE /products/{id}`) write to PostgreSQL and generate embeddings indexed into **ChromaDB Vector DB** simultaneously.
+### 2. Dual-Write Product Catalog Management
+- **SQL & Vector Store Sync**: Product operations write to PostgreSQL and generate embeddings indexed into **ChromaDB Vector DB** simultaneously (`create_product` & `delete_product`).
 
 ### 3. Non-Blocking Behavioral Event Tracking
 - **Asynchronous Telemetry**: React tracking hooks ([useTracker.ts](file:///c:/proj/SmartReco/smartreco/frontend/src/tracker/useTracker.ts)) track page views, searches, course views, scroll depths, and dwell time.

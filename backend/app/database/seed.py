@@ -12,19 +12,6 @@ async def seed_database():
     """Seed the database with initial data"""
     async with AsyncSessionLocal() as session:
         try:
-            from sqlalchemy import select
-            existing_admin = await session.execute(select(User).where(User.email == "admin@smartreco.com"))
-            if not existing_admin.scalar_one_or_none():
-                admin_password_hash = hash_password("Admin@123")
-                admin_user = User(
-                    name="Admin User",
-                    email="admin@smartreco.com",
-                    password_hash=admin_password_hash,
-                    role=UserRole.ADMIN,
-                    created_at=datetime.utcnow()
-                )
-                session.add(admin_user)
-
             # Check if products already seeded
             from sqlalchemy import delete
             existing_products = await session.execute(select(Product))

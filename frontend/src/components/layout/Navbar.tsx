@@ -10,7 +10,6 @@ import {
   HiSparkles, 
   HiBookOpen, 
   HiLightningBolt, 
-  HiShieldCheck, 
   HiLogout 
 } from 'react-icons/hi'
 
@@ -85,15 +84,6 @@ export const Navbar = () => {
 
           {/* User profile & actions */}
           <div className="flex items-center gap-3">
-            {user?.role === 'admin' && (
-              <Link
-                to="/admin"
-                className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-50 text-amber-900 text-xs font-bold rounded-xl border border-amber-200/80 hover:bg-amber-100/80 transition-all shadow-2xs"
-              >
-                <HiShieldCheck className="w-4 h-4 text-amber-600" /> Admin Portal
-              </Link>
-            )}
-
             <div className="flex items-center gap-3 pl-3 border-l border-gray-200">
               <div className="text-right hidden sm:block">
                 <div className="text-sm font-bold text-gray-900 leading-tight">{user?.name}</div>

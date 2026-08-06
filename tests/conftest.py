@@ -98,9 +98,8 @@ async def test_user(db_session: AsyncSession) -> User:
     user = User(
         email="testuser@example.com",
         name="Test User",
-        hashed_password=get_password_hash("TestPass123!"),
+        password_hash=get_password_hash("TestPass123!"),
         role=UserRole.USER,
-        is_active=True
     )
     db_session.add(user)
     await db_session.commit()
@@ -116,9 +115,8 @@ async def admin_user(db_session: AsyncSession) -> User:
     admin = User(
         email="admin@example.com",
         name="Admin User",
-        hashed_password=get_password_hash("AdminPass123!"),
+        password_hash=get_password_hash("AdminPass123!"),
         role=UserRole.ADMIN,
-        is_active=True
     )
     db_session.add(admin)
     await db_session.commit()
@@ -149,12 +147,12 @@ async def admin_token(client: AsyncClient, db_session: AsyncSession) -> str:
     admin = User(
         email="tokenadmin@example.com",
         name="Token Admin",
-        hashed_password=get_password_hash("AdminPass123!"),
+        password_hash=get_password_hash("AdminPass123!"),
         role=UserRole.ADMIN,
-        is_active=True
     )
     db_session.add(admin)
     await db_session.commit()
+
     
     # Login to get token
     login_data = {

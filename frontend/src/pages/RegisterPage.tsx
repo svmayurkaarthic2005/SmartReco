@@ -4,9 +4,8 @@
 
 import { useState, FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-// No backend API auth — using Supabase Auth exclusively
+import { register as apiRegister } from '../api/auth'
 import { useAuthStore } from '../store/authStore'
-import { supabase } from '../lib/supabase'
 
 // ── Eye toggle ───────────────────────────────────────────────────────────────
 const EyeIcon = ({ open }: { open: boolean }) =>
@@ -87,28 +86,19 @@ const RegisterPage = () => {
     if (!acceptedTerms) { setErrorMessage('Please accept the Terms of Service to continue'); return }
     setIsLoading(true); setErrorMessage('')
     try {
-      // Supabase Auth — primary and only auth provider
-      const { data: supaData, error: supaError } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: { data: { name: formData.name } }
-      })
-
-      if (supaError) throw new Error(supaError.message)
-
-      const token = supaData.session?.access_token || supaData.user?.id || 'sb-' + Date.now()
+      const response = await apiRegister({ name: formData.name, email: formData.email, password: formData.password })
+      // Build user directly from register response — avoids extra /auth/me round-trip
       const user = {
-        id: supaData.user?.id || 'usr-' + Date.now(),
-        name: formData.name,
+        id: response.user_id,
+        name: response.name,
         email: formData.email,
-        role: 'user',
+        role: response.role,
       }
-
-      storeLogin(token, user)
+      storeLogin(response.access_token, user)
       setSuccess(true)
-      setTimeout(() => navigate('/dashboard'), 900)
+      setTimeout(() => navigate('/dashboard'), 1400)
     } catch (error: any) {
-      const message = error.message || 'Registration failed. Please try again.'
+      const message = error.response?.data?.detail || 'Registration failed. Please try again.'
       setErrorMessage(message); setError(message)
     } finally {
       setIsLoading(false)

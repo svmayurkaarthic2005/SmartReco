@@ -29,6 +29,11 @@ def hash_password(plain: str) -> str:
     return pwd_context.hash(plain[:72])
 
 
+# Alias for backward compatibility / tests
+get_password_hash = hash_password
+
+
+
 def verify_password(plain: str, hashed: str) -> bool:
     """
     Verify a plain text password against a hashed password.

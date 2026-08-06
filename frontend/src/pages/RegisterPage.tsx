@@ -4,7 +4,7 @@
 
 import { useState, FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { register as apiRegister } from '../api/auth'
+// No backend API auth — using Supabase Auth exclusively
 import { useAuthStore } from '../store/authStore'
 import { supabase } from '../lib/supabase'
 
@@ -87,45 +87,28 @@ const RegisterPage = () => {
     if (!acceptedTerms) { setErrorMessage('Please accept the Terms of Service to continue'); return }
     setIsLoading(true); setErrorMessage('')
     try {
-      // 1. Primary Authentication via Supabase Auth
+      // Supabase Auth — primary and only auth provider
       const { data: supaData, error: supaError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
-        options: {
-          data: { name: formData.name }
-        }
+        options: { data: { name: formData.name } }
       })
 
-      if (supaError) {
-        throw new Error(supaError.message)
-      }
+      if (supaError) throw new Error(supaError.message)
 
-      // Try optional backend sync if API server is available
-      let token = supaData.session?.access_token || 'sb-token-' + Date.now()
-      let userId = supaData.user?.id || 'usr-' + Date.now()
-      let name = formData.name
-
-      try {
-        const response = await apiRegister({ name: formData.name, email: formData.email, password: formData.password })
-        if (response?.access_token) token = response.access_token
-        if (response?.user_id) userId = response.user_id
-        if (response?.name) name = response.name
-      } catch (backendErr) {
-        console.info('Backend sync optional notice (using Supabase Auth):', backendErr)
-      }
-
+      const token = supaData.session?.access_token || supaData.user?.id || 'sb-' + Date.now()
       const user = {
-        id: userId,
-        name: name,
+        id: supaData.user?.id || 'usr-' + Date.now(),
+        name: formData.name,
         email: formData.email,
         role: 'user',
       }
 
       storeLogin(token, user)
       setSuccess(true)
-      setTimeout(() => navigate('/dashboard'), 1000)
+      setTimeout(() => navigate('/dashboard'), 900)
     } catch (error: any) {
-      const message = error.message || error.response?.data?.detail || 'Registration failed. Please check credentials.'
+      const message = error.message || 'Registration failed. Please try again.'
       setErrorMessage(message); setError(message)
     } finally {
       setIsLoading(false)

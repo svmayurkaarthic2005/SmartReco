@@ -4,7 +4,7 @@
 
 import { useState, FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { login as apiLogin } from '../api/auth'
+// No backend API auth — using Supabase Auth exclusively
 import { useAuthStore } from '../store/authStore'
 import { supabase } from '../lib/supabase'
 
@@ -51,42 +51,26 @@ const LoginPage = () => {
     setIsLoading(true)
     setErrorMessage('')
     try {
-      // 1. Primary Authentication via Supabase Auth
+      // Supabase Auth — primary and only auth provider
       const { data: supaData, error: supaError } = await supabase.auth.signInWithPassword({
         email: formData.email,
         password: formData.password,
       })
 
-      if (supaError) {
-        throw new Error(supaError.message)
-      }
+      if (supaError) throw new Error(supaError.message)
 
-      let token = supaData.session?.access_token || 'sb-token-' + Date.now()
-      let userId = supaData.user?.id || 'usr-' + Date.now()
-      let name = supaData.user?.user_metadata?.name || formData.email.split('@')[0]
-      let role = 'user'
-
-      try {
-        const response = await apiLogin(formData)
-        if (response?.access_token) token = response.access_token
-        if (response?.user_id) userId = response.user_id
-        if (response?.name) name = response.name
-        if (response?.role) role = response.role
-      } catch (backendErr) {
-        console.info('Backend sync optional notice (using Supabase Auth):', backendErr)
-      }
-
+      const token = supaData.session?.access_token || supaData.user?.id || 'sb-' + Date.now()
       const user = {
-        id: userId,
-        name: name,
+        id: supaData.user?.id || 'usr-' + Date.now(),
+        name: supaData.user?.user_metadata?.name || formData.email.split('@')[0],
         email: formData.email,
-        role: role,
+        role: (supaData.user?.user_metadata?.role as string) || 'user',
       }
 
       storeLogin(token, user)
       navigate('/dashboard')
     } catch (error: any) {
-      const message = error.message || error.response?.data?.detail || 'Invalid email or password'
+      const message = error.message || 'Invalid email or password'
       setErrorMessage(message)
       setError(message)
     } finally {

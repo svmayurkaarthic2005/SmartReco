@@ -13,6 +13,8 @@
 
 ## 🎯 System Architecture & Design
 
+> 📖 **Detailed Specifications**: For deep-dive technical specs on each of our 7 AI micro-agents and pipeline subsystems, read the complete **[Engine & Agent Architecture Guide](docs/ARCHITECTURE.md)**.
+
 ```
 ┌───────────────────────────────────────────────────────────────────────────────────────────┐
 │                                   SmartReco Monorepo                                      │

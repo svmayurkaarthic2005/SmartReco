@@ -6,6 +6,7 @@ import { useState, FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { login as apiLogin } from '../api/auth'
 import { useAuthStore } from '../store/authStore'
+import { supabase } from '../lib/supabase'
 
 // ── Eye toggle icon ──────────────────────────────────────────────────────────
 const EyeIcon = ({ open }: { open: boolean }) =>
@@ -50,8 +51,18 @@ const LoginPage = () => {
     setIsLoading(true)
     setErrorMessage('')
     try {
+      // 1. Authenticate with Supabase Auth
+      try {
+        await supabase.auth.signInWithPassword({
+          email: formData.email,
+          password: formData.password,
+        })
+      } catch (sErr) {
+        console.warn('Supabase auth sign-in notice:', sErr)
+      }
+
+      // 2. Authenticate with SmartReco API
       const response = await apiLogin(formData)
-      // Build user directly from login response — avoids extra /auth/me round-trip
       const user = {
         id: response.user_id,
         name: response.name,

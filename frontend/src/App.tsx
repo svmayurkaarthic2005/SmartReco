@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { useAuthStore } from './store/authStore'
 import { useEffect, useRef } from 'react'
 import { trackEvent } from './api/events'
+import { supabase } from './lib/supabase'
 
 // Pages
 import LoginPage from './pages/LoginPage'
@@ -98,6 +99,28 @@ const RouteTracker = () => {
 
 function App() {
   const { isLoading } = useAuthStore()
+
+  useEffect(() => {
+    // Synchronize Supabase Auth state across the application
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.user && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
+        const store = useAuthStore.getState()
+        if (!store.user) {
+          const userObj = {
+            id: session.user.id,
+            name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Learner',
+            email: session.user.email || '',
+            role: 'user'
+          }
+          store.login(session.access_token, userObj)
+        }
+      }
+    })
+
+    return () => {
+      authListener?.subscription.unsubscribe()
+    }
+  }, [])
 
   if (isLoading) {
     return (

@@ -6,6 +6,7 @@ import { useState, FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { register as apiRegister } from '../api/auth'
 import { useAuthStore } from '../store/authStore'
+import { supabase } from '../lib/supabase'
 
 // ── Eye toggle ───────────────────────────────────────────────────────────────
 const EyeIcon = ({ open }: { open: boolean }) =>
@@ -86,8 +87,21 @@ const RegisterPage = () => {
     if (!acceptedTerms) { setErrorMessage('Please accept the Terms of Service to continue'); return }
     setIsLoading(true); setErrorMessage('')
     try {
+      // 1. Register with Supabase Auth
+      try {
+        await supabase.auth.signUp({
+          email: formData.email,
+          password: formData.password,
+          options: {
+            data: { name: formData.name }
+          }
+        })
+      } catch (sErr) {
+        console.warn('Supabase auth sign-up notice:', sErr)
+      }
+
+      // 2. Register with SmartReco API
       const response = await apiRegister({ name: formData.name, email: formData.email, password: formData.password })
-      // Build user directly from register response — avoids extra /auth/me round-trip
       const user = {
         id: response.user_id,
         name: response.name,

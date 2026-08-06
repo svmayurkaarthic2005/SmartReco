@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     db_max_overflow: int = Field(default=20, description="Max overflow connections")
     db_pool_timeout: int = Field(default=30, description="Pool timeout in seconds")
     db_echo: bool = Field(default=False, description="Echo SQL queries")
+    supabase_url: Optional[str] = Field(default="https://lrjxlsvgsfakpxwkibpk.supabase.co", description="Supabase project URL")
+    supabase_anon_key: Optional[str] = Field(default="sb_publishable_2ZPlTkpu6k0OM_mtFsv3yw_nLuiwcjT", description="Supabase publishable key")
     
     # =============================================================================
     # Redis Configuration

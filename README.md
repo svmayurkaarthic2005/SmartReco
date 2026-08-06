@@ -3,7 +3,7 @@
 > **Built for the Krish Naik Academy SmartReco Build Challenge 2026**  
 > *Powered by **Mesh API** (Mandatory LLM Gateway) and **LangGraph Multi-Agent Architecture***
 >
-> 🌐 **Live Production Application**: [https://smart-reco-e6saj88lomivq-mayurs-projects-2c59cfae.vercel.app]([https://smart-reco-e6saj88lomivq-mayurs-projects-2c59cfae.vercel.app](https://smart-reco-e6sa-j88lomivq-mayurs-projects-2c59cfae.vercel.app/))
+> 🌐 **Live Production Frontend Application**: [https://smart-reco-e6sa-j88lomivq-mayurs-projects-2c59cfae.vercel.app/](https://smart-reco-e6sa-j88lomivq-mayurs-projects-2c59cfae.vercel.app/)
 
 ---
 

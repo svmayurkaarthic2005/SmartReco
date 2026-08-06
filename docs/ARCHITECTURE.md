@@ -1,7 +1,6 @@
 # SmartReco — Comprehensive AI Engine & System Architecture Guide
 
-> **Official Technical Specification for the SmartReco 7-Agent LangGraph Pipeline, Telemetry Engine, Vector RAG Search, and Mesh API Gateway**  
-> 🌐 **Live Production Application**: [https://smart-reco-e6saj88lomivq-mayurs-projects-2c59cfae.vercel.app](https://smart-reco-e6saj88lomivq-mayurs-projects-2c59cfae.vercel.app)
+> **Official Technical Specification for the SmartReco 7-Agent LangGraph Pipeline, Telemetry Engine, Vector RAG Search, and Mesh API Gateway**
 
 ---
 

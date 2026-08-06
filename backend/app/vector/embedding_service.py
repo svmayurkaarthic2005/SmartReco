@@ -37,7 +37,6 @@ class EmbeddingService:
             if SentenceTransformer is not None:
                 try:
                     print(f"Loading cached embedding model: {self.model_name}")
-                    # Try instant local load first (0ms HF network latency)
                     try:
                         self._model = SentenceTransformer(self.model_name, local_files_only=True)
                     except Exception:
@@ -48,29 +47,26 @@ class EmbeddingService:
                 print("Warning: sentence_transformers not installed, using fallback embeddings.")
         return self._model
 
-    
     async def generate_embedding(self, text: str) -> List[float]:
         """
         Generate embedding for a single text.
-        
-        Args:
-            text: Input text to embed
-            
-        Returns:
-            List of floats representing the embedding vector
-            
-        Example:
-            >>> service = EmbeddingService()
-            >>> embedding = await service.generate_embedding("Python programming")
-            >>> len(embedding)
-            384
         """
         if not text or not text.strip():
-            # Return zero vector for empty text
             return [0.0] * settings.embedding_dimension
         
         if self.model is None:
-            return [0.1] * settings.embedding_dimension
+            import hashlib
+            words = text.lower().split()
+            vec = np.zeros(settings.embedding_dimension, dtype=np.float32)
+            for word in words:
+                h = int(hashlib.md5(word.encode()).hexdigest(), 16)
+                idx = h % settings.embedding_dimension
+                val = ((h >> 16) % 1000) / 1000.0 - 0.5
+                vec[idx] += val
+            norm = np.linalg.norm(vec)
+            if norm > 0:
+                vec = vec / norm
+            return vec.tolist()
 
         # Run the synchronous encode() in a thread pool so it doesn't block
         # the asyncio event loop. Without this, all other requests (e.g. /products)

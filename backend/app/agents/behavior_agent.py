@@ -266,9 +266,13 @@ class BehaviorAgent:
             if category:
                 if not is_unenrollment:
                     summary.last_viewed_category = category
+                    is_module_watch = meta.get('action') == 'module_watch' or meta.get('module_title') is not None
                     base_w = 1
                     if is_completion:
-                        base_w = 15
+                        base_w = 20
+                        summary.completion_counts[category] = summary.completion_counts.get(category, 0) + 1
+                    elif is_module_watch:
+                        base_w = 25
                         summary.completion_counts[category] = summary.completion_counts.get(category, 0) + 1
                     elif is_re_enrollment:
                         base_w = 60

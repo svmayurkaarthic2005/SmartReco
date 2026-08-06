@@ -86,7 +86,8 @@ graph TD
   |---|:---:|---|
   | `ENROLL` | **+50** | Strong intent to commit to domain |
   | `RE_ENROLL` | **+60** | Highest commitment signal after un-enrollment |
-  | `MODULE_COMPLETE` | **+15** | Active learning progression |
+  | `MODULE_WATCH` | **+25** | High active interest watching module lecture video streams |
+  | `MODULE_COMPLETE` | **+20** | Active learning progression completing modules |
   | `LESSON_COMPLETE` | **+8** | Granular learning progress |
   | `ADD_TO_CART` / `WISHLIST` | **+5** | High purchasing/learning interest |
   | `VIEW_PRODUCT` | **+3** | Explicit course exploration |

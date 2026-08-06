@@ -1012,6 +1012,33 @@ export const CourseDetailPage = () => {
     setEnrolling(false)
   }
 
+  const handleModuleSelect = async (moduleIdx: number, moduleObj: any) => {
+    setActiveModule(moduleIdx)
+
+    if (user && course) {
+      const meta = {
+        course_title: course.title,
+        category: course.category,
+        module_index: moduleIdx,
+        module_title: moduleObj.title,
+        action: 'module_watch',
+        watched_at: new Date().toISOString()
+      }
+
+      await trackEvent({
+        user_id: user.id,
+        session_id: 'session-' + Date.now(),
+        event_type: 'view_product',
+        product_id: course.id,
+        dwell_time: 15,
+        metadata: meta,
+        event_metadata: meta
+      }).catch(() => {})
+
+      await refreshRecommendations().catch(() => {})
+    }
+  }
+
   const toggleLessonCompleted = async (lessonKey: string, lessonTitle: string, moduleTitle: string, moduleIdx: number) => {
     const isNowDone = !completedLessons[lessonKey]
     const updatedLessons = { ...completedLessons, [lessonKey]: isNowDone }
@@ -1203,7 +1230,7 @@ export const CourseDetailPage = () => {
                     {modulesData.map((mod, idx) => (
                       <button
                         key={idx}
-                        onClick={() => setActiveModule(idx)}
+                        onClick={() => handleModuleSelect(idx, mod)}
                         className={`p-3 rounded-xl text-left transition-all border ${
                           activeModule === idx
                             ? 'bg-primary-600 text-white border-primary-600 shadow-sm'

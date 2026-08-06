@@ -8,7 +8,7 @@ import { useAuthStore } from '../store/authStore'
 // In development, use an empty baseURL so requests go through Vite's proxy (avoids CORS).
 // In production, VITE_API_BASE_URL should be set to the deployed backend URL.
 const API_BASE_URL = import.meta.env.PROD
-  ? (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '/api/v1')
+  ? (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'https://smartreco-backend.onrender.com/api/v1')
   : ''
 
 // Create axios instance

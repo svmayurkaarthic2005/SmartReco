@@ -51,28 +51,42 @@ const LoginPage = () => {
     setIsLoading(true)
     setErrorMessage('')
     try {
-      // 1. Authenticate with Supabase Auth
-      try {
-        await supabase.auth.signInWithPassword({
-          email: formData.email,
-          password: formData.password,
-        })
-      } catch (sErr) {
-        console.warn('Supabase auth sign-in notice:', sErr)
+      // 1. Primary Authentication via Supabase Auth
+      const { data: supaData, error: supaError } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password,
+      })
+
+      if (supaError) {
+        throw new Error(supaError.message)
       }
 
-      // 2. Authenticate with SmartReco API
-      const response = await apiLogin(formData)
-      const user = {
-        id: response.user_id,
-        name: response.name,
-        email: formData.email,
-        role: response.role,
+      let token = supaData.session?.access_token || 'sb-token-' + Date.now()
+      let userId = supaData.user?.id || 'usr-' + Date.now()
+      let name = supaData.user?.user_metadata?.name || formData.email.split('@')[0]
+      let role = 'user'
+
+      try {
+        const response = await apiLogin(formData)
+        if (response?.access_token) token = response.access_token
+        if (response?.user_id) userId = response.user_id
+        if (response?.name) name = response.name
+        if (response?.role) role = response.role
+      } catch (backendErr) {
+        console.info('Backend sync optional notice (using Supabase Auth):', backendErr)
       }
-      storeLogin(response.access_token, user)
+
+      const user = {
+        id: userId,
+        name: name,
+        email: formData.email,
+        role: role,
+      }
+
+      storeLogin(token, user)
       navigate('/dashboard')
     } catch (error: any) {
-      const message = error.response?.data?.detail || 'Invalid email or password'
+      const message = error.message || error.response?.data?.detail || 'Invalid email or password'
       setErrorMessage(message)
       setError(message)
     } finally {

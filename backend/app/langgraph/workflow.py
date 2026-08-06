@@ -207,8 +207,47 @@ async def ranking_node(state: AgentState) -> dict:
     Returns: {ranked_products}
     """
     try:
-        if not state["candidate_products"]:
-            return {"error": "No candidates to rank"}
+        candidates = state["candidate_products"]
+        summary = state.get("behavior_summary")
+        exclude_uuids = []
+        if summary:
+            for pid in getattr(summary, 'enrolled_product_ids', []) + getattr(summary, 'unenrolled_product_ids', []):
+                try:
+                    exclude_uuids.append(UUID(pid))
+                except (ValueError, TypeError):
+                    pass
+
+        # Fallback 1: if no candidates were retrieved, fetch non-excluded products from DB
+        if not candidates:
+            stmt = select(Product).order_by(Product.created_at.desc()).limit(12)
+            if exclude_uuids:
+                stmt = stmt.where(Product.id.notin_(exclude_uuids))
+            result = await _db_session.execute(stmt)
+            db_products = result.scalars().all()
+            
+            # If all DB products were excluded, fallback to all DB products
+            if not db_products:
+                stmt_all = select(Product).order_by(Product.created_at.desc()).limit(12)
+                db_products = (await _db_session.execute(stmt_all)).scalars().all()
+
+            from app.agents import CandidateProduct
+            candidates = [
+                CandidateProduct(
+                    product_id=str(p.id),
+                    title=p.title,
+                    description=p.description,
+                    category=p.category,
+                    difficulty=p.difficulty_level.value,
+                    price=p.price,
+                    tags=p.tags,
+                    similarity_score=0.5
+                )
+                for p in db_products
+            ]
+            print(f"[{state['trace_id']}] Ranking fallback: using {len(candidates)} DB products")
+
+        if not candidates:
+            return {"error": "No candidates to rank (even DB fallback empty)"}
         
         if not state["behavior_summary"] or not state["persona_result"]:
             return {"error": "Missing behavior or persona data"}
@@ -216,7 +255,7 @@ async def ranking_node(state: AgentState) -> dict:
         parent_run_id = state.get("parent_run_id")
         
         # Fetch full product metadata from database
-        product_ids = [UUID(c.product_id) for c in state["candidate_products"]]
+        product_ids = [UUID(c.product_id) for c in candidates]
         stmt = select(Product).where(Product.id.in_(product_ids))
         result = await _db_session.execute(stmt)
         products_dict = {str(p.id): p for p in result.scalars().all()}
@@ -226,14 +265,44 @@ async def ranking_node(state: AgentState) -> dict:
         
         # Rank candidates
         ranked = ranking_agent.rank(
-            state["candidate_products"],
+            candidates,
             state["behavior_summary"],
             state["persona_result"],
             products_dict,
             parent_run_id=parent_run_id
         )
+
+        # Fallback 2: If ranking produced 0 valid products (e.g. all candidates were hard-clamped),
+        # convert non-dropped candidates to ranked products with baseline score 0.5
+        if not ranked and candidates:
+            from app.agents import RankedProduct
+            unenrolled_ids_set = {str(pid).lower() for pid in getattr(summary, 'unenrolled_product_ids', [])}
+            unenrolled_titles_set = {t.lower() for t in getattr(summary, 'unenrolled_product_titles', [])}
+            
+            non_dropped = [
+                c for c in candidates
+                if str(c.product_id).lower() not in unenrolled_ids_set and c.title.lower() not in unenrolled_titles_set
+            ]
+            fallback_source = non_dropped if non_dropped else candidates
+            
+            ranked = [
+                RankedProduct(
+                    product_id=c.product_id,
+                    title=c.title,
+                    description=c.description,
+                    category=c.category,
+                    difficulty=c.difficulty,
+                    price=c.price,
+                    tags=c.tags,
+                    final_score=0.5,
+                    rank_position=idx + 1,
+                    score_breakdown={}
+                )
+                for idx, c in enumerate(fallback_source[:8])
+            ]
         
-        print(f"[{state['trace_id']}] Ranked {len(ranked)} products (top score: {ranked[0].final_score:.3f})")
+        top_score = ranked[0].final_score if ranked else 0.0
+        print(f"[{state['trace_id']}] Ranked {len(ranked)} products (top score: {top_score:.3f})")
         
         return {"ranked_products": ranked}
     

@@ -1,4 +1,4 @@
-# SmartReco — Behavioral AI Recommendation Agent
+# SmartReco — Behavioral AI Recommendation Agent & Learning Hub
 
 > **Built for the Krish Naik Academy SmartReco Build Challenge 2026**  
 > *Powered by **Mesh API** (Mandatory LLM Gateway) and **LangGraph Multi-Agent Architecture***
@@ -7,11 +7,11 @@
 
 ## 🏆 Hackathon Overview
 
-**SmartReco** is an intelligent e-learning recommendation platform built for the **SmartReco Build Challenge 2026**. It continuously observes user behavioral activity (page views, course enrollments, category browsing, search queries, scroll depth, and dwell time), understands user intent via a 6-agent reasoning pipeline, retrieves catalog-grounded courses via vector RAG, and generates persuasive personalized learning roadmaps.
+**SmartReco** is an intelligent e-learning recommendation platform built for the **SmartReco Build Challenge 2026**. It continuously observes user behavioral telemetry (page views, course enrollments, category browsing, search queries, lesson completions, un-enrollments, scroll depth, and dynamic dwell time), understands user intent via a 7-agent reasoning pipeline, retrieves catalog-grounded courses via vector RAG, and generates persuasive personalized learning roadmaps.
 
 ---
 
-## 🎯 Architecture & System Design
+## 🎯 System Architecture & Design
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────────────────┐
@@ -22,7 +22,8 @@
 │  ┌───────────────────────────────────────┐  │  ┌───────────────────────────────────────┐  │
 │  │ Learner Dashboard │ Activity Stream   │  │  │ API Layer (Auth, Events, Recs, Catalog)│  │
 │  │ Course Catalog    │ AI Recommendations│  │  │ LangGraph Multi-Agent Workflow Engine │  │
-│  └───────────────────┬───────────────────┘  │  └───────────────────┬───────────────────┘  │
+│  │ Course Detail Hub │ My Courses        │  │  └───────────────────┬───────────────────┘  │
+│  └───────────────────┬───────────────────┘  │                      │                      │
 └──────────────────────┼──────────────────────┴──────────────────────┼──────────────────────┘
                        │ HTTP / REST API (JWT Bearer Auth)           │
                        ▼                                             ▼
@@ -38,24 +39,40 @@
 
 ---
 
-## ⭐ Key Challenge Requirements & Implementations
+## 🤖 LangGraph Multi-Agent AI Pipeline (7 Specialized Agents)
 
-### 1. Web Platform Foundation
-- **Authentication**: Simple, secure JWT Bearer authentication for user login and registration.
-- **Relational Data Model**: PostgreSQL schema connecting `User`, `Product`, `Event`, `Recommendation`, and `RecommendationCache`.
+SmartReco orchestrates 7 specialized AI agents in an explicit state graph ([workflow.py](file:///c:/proj/SmartReco/smartreco/backend/app/langgraph/workflow.py)) to analyze intent, calculate multi-factor progression scores, and generate learning roadmaps:
 
-### 2. Dual-Write Product Catalog Management
-- **SQL & Vector Store Sync**: Product operations write to PostgreSQL and generate embeddings indexed into **ChromaDB Vector DB** simultaneously (`create_product` & `delete_product`).
+```mermaid
+graph TD
+    A["User Behavioral Events (Clicks, Views, Enroll, Unenroll)"] --> B["BehaviorAgent (Aggregation & Decay)"]
+    B --> C["PersonaAgent (Clustering)"]
+    B --> D["RecoveryAgent (Risk Check)"]
+    B --> E["RetrievalPlanner (Semantic Query)"]
+    E --> F["VectorRetrievalAgent (ChromaDB + Embeddings)"]
+    F --> G["RankingAgent (6-Factor Scoring)"]
+    G --> H["NarrativeAgent (Mesh API LLM)"]
+    H --> I["Personalized AI Learning Recommendations UI"]
+```
 
-### 3. Non-Blocking Behavioral Event Tracking
-- **Asynchronous Telemetry**: React tracking hooks ([useTracker.ts](file:///c:/proj/SmartReco/smartreco/frontend/src/tracker/useTracker.ts)) track page views, searches, course views, scroll depths, and dwell time.
-- **Batching & Throttling**: High-frequency events are throttled and dispatched via `/events/batch` without blocking UI interactions.
+1. **`BehaviorAgent`**: Ingests user telemetry events, computes recency-weighted category intent, applies instant un-enrollment category wipes, and tracks progression.
+2. **`PersonaAgent`**: Classifies users into 6 behavioral personas (*Explorer, Focused Builder, Career Switcher, Overwhelmed Learner, Price Sensitive, Drop-Off Risk*).
+3. **`RecoveryAgent`**: Detects churn signals, inactivity, and exit events to trigger engagement recovery mechanisms.
+4. **`RetrievalPlanner`**: Formulates intent-focused vector search queries while excluding enrolled and explicitly dropped courses.
+5. **`VectorRetrievalAgent`**: Executes semantic RAG searches via ChromaDB with SentenceTransformers (`all-MiniLM-L6-v2`) and PostgreSQL fallbacks.
+6. **`RankingAgent`**: Re-ranks candidate courses using a 6-factor mathematical formula:
+   $$\text{Final Score} = S_{\text{semantic}} \cdot 0.35 + S_{\text{difficulty}} \cdot 0.20 + S_{\text{progression}} \cdot 0.15 + S_{\text{price}} \cdot 0.10 + S_{\text{tags}} \cdot 0.10 + S_{\text{freshness}} \cdot 0.10 + \text{Boosts} - \text{Penalties}$$
+7. **`NarrativeAgent`**: Uses OpenAI Mesh API (`gpt-4o`) to generate custom learning goals, match explanations, and structured 3-step learning roadmaps aligned with top recommendations.
 
-### 4. Agentic Recommendation Engine
-- **Mesh API Mandatory Integration**: All LLM calls route through Mesh API gateway (`https://api.meshapi.ai/v1`) using `openai.AsyncOpenAI`.
-- **ChromaDB RAG Retrieval**: Grounded vector retrieval ensures recommended courses exist in the real database catalog.
-- **Persuasive Narratives**: LLM generates custom learning goals, match explanations, and structured 3-step learning roadmaps.
-- **MD5 Behavioral Hash Caching**: Computes a digital fingerprint over recent events to avoid unnecessary LLM calls and purge cache only when user interests shift.
+---
+
+## ⭐ Core Platform Features
+
+- **Dynamic AI Recommendation Engine**: Updates recommendations live based on enrollments, module completions, views, and dropped courses.
+- **Un-Enrollment Intent Reset**: Dropping a course instantly purges category dominance (`categories_explored = 0`) and applies a hard score clamp (`final_score = 0.0`) so un-enrolled tracks don't linger in recommendations.
+- **Interactive Course Learning Hub**: 15 distinct technology tracks featuring full HD 1080p embeddable YouTube video lectures, downloadable source code, and lecture notes across all 4 module levels.
+- **Real-Time Dwell Time & Route Telemetry**: Automatically measures exact dynamic dwell time on page visits (`RouteTracker`) and logs user navigation shifts to PostgreSQL.
+- **Multi-Layer Cache & Lock Management**: Combines Redis in-memory key storage with PostgreSQL `recommendation_cache` and event-hash invalidation (`compute_event_hash`).
 
 ---
 
@@ -70,19 +87,24 @@
 
 ---
 
-## 📚 Course Catalog (95+ Courses Across 10 Domains)
+## 📚 Course Catalog (95+ Courses Across 15 Domains)
 
 Pre-seeded dataset with 95+ comprehensive technology courses:
-- **AI/ML & LLM Agents** (10 courses) — LangChain, LangGraph, Transformers, PyTorch, Autonomous Agents.
-- **Web Development** (10 courses) — React 18, Next.js 14 App Router, Node.js Microservices, GraphQL, WebSockets.
-- **Cyber Security & Ethical Hacking** (10 courses) — OWASP Top 10, Cloud Security, Ghidra Malware Analysis, DevSecOps.
-- **Blockchain & Web3** (10 courses) — Solidity, DeFi Protocols, Solana Rust Anchor, zk-SNARKs, NFT Platforms.
-- **Mobile Development** (10 courses) — React Native, Flutter 3, iOS Swift, Android Kotlin Compose, KMP.
-- **System Design & Architecture** (10 courses) — High-Scale System Design, Go Distributed Systems, Microservices, DB Internals.
-- **Data Science & Big Data** (10 courses) — Apache Spark, SQL Analytics, Snowflake, Airflow, Kafka Streaming.
-- **Cloud Computing** (10 courses) — AWS Solutions Architect, Kubernetes, Azure DevOps, GCP, Terraform, Serverless.
-- **DevOps & SRE** (10 courses) — CI/CD Pipelines, Prometheus/Grafana, Ansible, GitOps ArgoCD, Service Mesh Istio.
-- **UI/UX & Product Design** (5 courses) — Figma Prototyping, Design Systems, Motion Graphics, WCAG Accessibility.
+- **AI/ML & LLM Agents** — LangChain, LangGraph, Transformers, PyTorch, Autonomous Agents.
+- **Fullstack Web Development** — React 18, Next.js 14 App Router, Node.js Microservices, GraphQL, WebSockets.
+- **Android App Development** — Kotlin Syntax, Jetpack Compose UI, Room Database, Retrofit MVVM.
+- **iOS App Development** — Swift 5, SwiftUI Declarative UI, CoreData, Xcode Cloud CI/CD.
+- **Flutter & Cross-Platform** — Dart Essentials, Flutter Widgets, Provider State, Firebase.
+- **React Native & Expo** — Mobile Component Styling, React Navigation, Play Store Deployment.
+- **Tailwind CSS & Design Systems** — CSS Grid, Flexbox, Tailwind Tokens, Micro-Interactions.
+- **Cyber Security & Ethical Hacking** — OWASP Top 10, Wireshark, Metasploit, Ghidra Reverse Engineering.
+- **Blockchain & Web3** — Solidity, Smart Contracts, DeFi Protocols, Solana Rust Anchor.
+- **System Design & Architecture** — High-Scale System Design, Microservices, Distributed Caching.
+- **Data Engineering & Big Data** — Apache Spark, SQL Analytics, Snowflake, Airflow, Kafka Streaming.
+- **Database Architecture** — PostgreSQL Query Tuning, MongoDB Document Store, Redis Caching.
+- **Cloud Computing & DevOps** — AWS Solutions Architect, Docker, Kubernetes, Terraform.
+- **Game Development** — C# Unity Engine, 2D/3D Physics, Unreal Engine 5 Environment.
+- **UI/UX & Product Design** — Figma Prototyping, Wireframing, Motion Design, Accessibility.
 
 ---
 

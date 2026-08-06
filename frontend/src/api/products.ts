@@ -20,10 +20,15 @@ export interface Product {
 /**
  * Get products (search / filter)
  */
-export const getProducts = async (): Promise<Product[]> => {
+export const getProducts = async (params?: { category?: string; difficulty?: string; limit?: number }): Promise<Product[]> => {
   // Fetch products from public /products endpoint
+  // Short 8s timeout: this is a simple DB query, not an LLM call.
+  // If backend is busy with recommendations, fail fast and use defaults.
   try {
-    const response = await apiClient.get<Product[]>('/products')
+    const response = await apiClient.get<Product[]>('/products', {
+      params: { limit: params?.limit ?? 50, ...params },
+      timeout: 8000,
+    })
     if (response.data && response.data.length > 0) {
       return response.data
     }

@@ -1,5 +1,6 @@
 """Embedding service for generating vector embeddings"""
 
+import asyncio
 from typing import List, Optional
 import numpy as np
 
@@ -35,8 +36,12 @@ class EmbeddingService:
         if self._model is None:
             if SentenceTransformer is not None:
                 try:
-                    print(f"Loading embedding model: {self.model_name}")
-                    self._model = SentenceTransformer(self.model_name)
+                    print(f"Loading cached embedding model: {self.model_name}")
+                    # Try instant local load first (0ms HF network latency)
+                    try:
+                        self._model = SentenceTransformer(self.model_name, local_files_only=True)
+                    except Exception:
+                        self._model = SentenceTransformer(self.model_name)
                 except Exception as e:
                     print(f"Warning: Could not load SentenceTransformer model: {e}")
             else:
@@ -67,13 +72,19 @@ class EmbeddingService:
         if self.model is None:
             return [0.1] * settings.embedding_dimension
 
-        # Generate embedding
-        embedding = self.model.encode(
-            text,
-            convert_to_numpy=True,
-            show_progress_bar=False
+        # Run the synchronous encode() in a thread pool so it doesn't block
+        # the asyncio event loop. Without this, all other requests (e.g. /products)
+        # stall for the full duration of the CPU-bound embedding computation.
+        loop = asyncio.get_running_loop()
+        embedding = await loop.run_in_executor(
+            None,
+            lambda: self.model.encode(
+                text,
+                convert_to_numpy=True,
+                show_progress_bar=False
+            )
         )
-        
+
         # Convert to list of floats
         return embedding.tolist()
     
@@ -101,15 +112,22 @@ class EmbeddingService:
         
         # Filter out empty texts
         non_empty_texts = [t if t and t.strip() else " " for t in texts]
-        
-        # Generate embeddings
-        embeddings = self.model.encode(
-            non_empty_texts,
-            convert_to_numpy=True,
-            show_progress_bar=False,
-            batch_size=32
+
+        if self.model is None:
+            return [[0.1] * settings.embedding_dimension] * len(non_empty_texts)
+
+        # Run the synchronous batch encode in a thread pool
+        loop = asyncio.get_running_loop()
+        embeddings = await loop.run_in_executor(
+            None,
+            lambda: self.model.encode(
+                non_empty_texts,
+                convert_to_numpy=True,
+                show_progress_bar=False,
+                batch_size=32
+            )
         )
-        
+
         # Convert to list of lists
         return [emb.tolist() for emb in embeddings]
     

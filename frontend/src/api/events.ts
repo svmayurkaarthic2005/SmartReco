@@ -5,13 +5,14 @@
 import { apiClient } from './client'
 
 export interface EventCreatePayload {
-  user_id: string
+  user_id?: string
   session_id: string
-  event_type: 'view_product' | 'view_category' | 'click' | 'search' | 'dwell_time' | 'enroll' | 'scroll' | 'time_on_page'
+  event_type: 'view_product' | 'view_category' | 'click' | 'search' | 'dwell_time' | 'enroll' | 'unenroll' | 're_enroll' | 'module_complete' | 'lesson_complete' | 'scroll' | 'time_on_page'
   product_id?: string
   search_query?: string
   dwell_time?: number
   event_metadata?: Record<string, any>
+  metadata?: Record<string, any>
   timestamp?: string
 }
 

@@ -17,11 +17,11 @@ import {
   HiFilter,
   HiTrendingUp,
   HiAcademicCap,
+  HiCheckCircle,
   HiChevronDown,
   HiX,
 } from 'react-icons/hi'
 
-// ── Event type config ────────────────────────────────────────────────────────
 const EVENT_CONFIG: Record<string, { label: string; color: string; dot: string; icon: any }> = {
   view_product:    { label: 'View Product',   color: 'bg-blue-50 text-blue-700 border-blue-200',     dot: 'bg-blue-500',    icon: HiEye },
   view_category:  { label: 'Browse Category', color: 'bg-indigo-50 text-indigo-700 border-indigo-200', dot: 'bg-indigo-400', icon: HiEye },
@@ -29,6 +29,10 @@ const EVENT_CONFIG: Record<string, { label: string; color: string; dot: string; 
   search:         { label: 'Search',          color: 'bg-amber-50 text-amber-700 border-amber-200',   dot: 'bg-amber-500',   icon: HiSearch },
   enroll:         { label: 'Enrollment',      color: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500', icon: HiAcademicCap },
   enrollment:     { label: 'Enrollment',      color: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500', icon: HiAcademicCap },
+  re_enroll:      { label: 'Re-Enrollment 🔄',color: 'bg-emerald-100 text-emerald-900 border-emerald-300 font-bold', dot: 'bg-emerald-600', icon: HiRefresh },
+  lesson_complete:{ label: 'Lesson Completed',color: 'bg-emerald-50 text-emerald-800 border-emerald-300 font-bold', dot: 'bg-emerald-600', icon: HiCheckCircle },
+  module_complete:{ label: 'Module Completed',color: 'bg-emerald-100 text-emerald-900 border-emerald-400 font-extrabold', dot: 'bg-emerald-700', icon: HiCheckCircle },
+  unenroll:       { label: 'Unenrolled',      color: 'bg-rose-50 text-rose-700 border-rose-200',     dot: 'bg-rose-500',    icon: HiTag },
   scroll:         { label: 'Scroll',          color: 'bg-teal-50 text-teal-700 border-teal-200',     dot: 'bg-teal-500',    icon: HiTrendingUp },
   time_on_page:   { label: 'Time on Page',    color: 'bg-sky-50 text-sky-700 border-sky-200',        dot: 'bg-sky-500',     icon: HiClock },
   dwell_time:     { label: 'Dwell Time',      color: 'bg-sky-50 text-sky-700 border-sky-200',        dot: 'bg-sky-500',     icon: HiClock },
@@ -40,13 +44,17 @@ const EVENT_CONFIG: Record<string, { label: string; color: string; dot: string; 
   category_switch:{ label: 'Category Switch', color: 'bg-cyan-50 text-cyan-700 border-cyan-200',    dot: 'bg-cyan-500',    icon: HiFilter },
 }
 
-const getBadge = (type: string) =>
-  EVENT_CONFIG[type] ?? {
+const getBadge = (type: string, meta?: any) => {
+  if (meta?.action === 're_enroll' || meta?.action === 're-enroll') {
+    return EVENT_CONFIG['re_enroll']
+  }
+  return EVENT_CONFIG[type] ?? {
     label: type.replace(/_/g, ' '),
     color: 'bg-gray-50 text-gray-700 border-gray-200',
     dot: 'bg-gray-400',
     icon: HiTag,
   }
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const getDwellTime = (evt: UserEvent): number | null => {
@@ -203,7 +211,38 @@ export const ActivityPage = () => {
     .sort(([, a], [, b]) => b - a)
     .slice(0, 6)
 
-  const enrollCount   = typeCounts['enroll'] ?? typeCounts['enrollment'] ?? 0
+  const activeEnrolledCount = (() => {
+    const courseState = new Map<string, string>() // course_key -> latest event_type
+    for (const e of events) {
+      const meta = (e.metadata || (e as any).event_metadata || {})
+      const key = e.product_id || meta.course_title || meta.title
+      const evtType = String(e.event_type || '').toLowerCase()
+      if (key && (evtType === 'enroll' || evtType === 'enrollment' || evtType === 'unenroll' || evtType === 'drop_course')) {
+        if (!courseState.has(key)) {
+          courseState.set(key, evtType)
+        }
+      }
+    }
+    let count = 0
+    for (const type of courseState.values()) {
+      if (type === 'enroll' || type === 'enrollment') {
+        count++
+      }
+    }
+    return count
+  })()
+
+  const uniqueCoursesViewedCount = new Set(
+    events
+      .filter(e => e.event_type === 'view_product')
+      .map(e => {
+        const meta = (e.metadata || (e as any).event_metadata || {})
+        return e.product_id || meta.course_title || meta.title
+      })
+      .filter(Boolean)
+  ).size
+
+  const enrollCount   = activeEnrolledCount
   const searchCount   = typeCounts['search'] ?? 0
   const viewCount     = typeCounts['view_product'] ?? 0
   const avgDwell      = (() => {
@@ -249,8 +288,8 @@ export const ActivityPage = () => {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
             { label: 'Total Events',   value: totalEvents,                        sub: 'recorded in database',     color: 'text-primary-700' },
-            { label: 'Course Views',   value: viewCount,                          sub: 'product view events',      color: 'text-blue-700'    },
-            { label: 'Enrollments',    value: enrollCount,                        sub: 'courses enrolled',         color: 'text-emerald-700' },
+            { label: 'Course Views',   value: viewCount,                          sub: `${uniqueCoursesViewedCount} unique course${uniqueCoursesViewedCount === 1 ? '' : 's'} viewed`, color: 'text-blue-700' },
+            { label: 'Active Enrollments', value: enrollCount,                        sub: 'active course count',      color: 'text-emerald-700' },
             { label: 'Avg Dwell Time', value: avgDwell != null ? `${avgDwell}s` : '—', sub: 'per session page', color: 'text-sky-700' },
           ].map(card => (
             <div key={card.label} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
@@ -404,7 +443,7 @@ export const ActivityPage = () => {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {filtered.map((evt) => {
-                    const badge  = getBadge(evt.event_type)
+                    const badge  = getBadge(evt.event_type, evt.metadata || (evt as any).event_metadata)
                     const Icon   = badge.icon
                     const dwell  = getDwellTime(evt)
                     const details = getDetails(evt, productsMap)

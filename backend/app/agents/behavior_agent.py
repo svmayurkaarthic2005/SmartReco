@@ -42,6 +42,13 @@ class BehaviorSummary:
     dominant_difficulty: str = 'intermediate'
     viewed_durations: List[float] = field(default_factory=list)
     avg_duration_preference: float = 0.0
+    completion_counts: Dict[str, int] = field(default_factory=dict)  # category → number of lesson/module completions
+    re_enrollment_events: int = 0
+    re_enrolled_categories: List[str] = field(default_factory=list)
+    unenrollment_events: int = 0
+    unenrolled_product_ids: List[str] = field(default_factory=list)
+    unenrolled_product_titles: List[str] = field(default_factory=list)
+    unenrolled_categories: List[str] = field(default_factory=list)
 
 
 class BehaviorAgent:
@@ -162,18 +169,49 @@ class BehaviorAgent:
             product_obj = product_map.get(str(event.product_id)) if event.product_id else None
             meta = event.event_metadata or {}
             category = meta.get('category') or (product_obj.category if product_obj else None)
-            is_enrollment = (event_type == EventType.ENROLL or str(event_type).lower() in ("enroll", "enrollment"))
+
+            # Detect re-enrollment: either the event_type is RE_ENROLL enum value,
+            # or it's an ENROLL with action metadata explicitly set to 're_enroll'
+            is_re_enrollment = (
+                event_type == EventType.RE_ENROLL
+                or str(event_type).lower() == 're_enroll'
+                or (event_type == EventType.ENROLL and meta.get('action') in ('re_enroll', 'reenroll'))
+            )
+            # Treat both ENROLL and RE_ENROLL as enrollment events
+            is_enrollment = (
+                event_type in (EventType.ENROLL, EventType.RE_ENROLL)
+                or str(event_type).lower() in ('enroll', 'enrollment', 're_enroll', 'reenroll')
+            )
+            is_unenrollment = (
+                event_type == EventType.UNENROLL
+                or str(event_type).lower() in ('unenroll', 'unenrollment', 'drop_course')
+            )
+            is_completion = (
+                event_type in (EventType.MODULE_COMPLETE, EventType.LESSON_COMPLETE)
+                or 'complete' in str(event_type).lower()
+            )
             
+            if is_re_enrollment:
+                summary.re_enrollment_events += 1
+                if category and category not in summary.re_enrolled_categories:
+                    summary.re_enrolled_categories.append(category)
+
             # Recency multiplier (recent events weighted up to 3x higher)
             recency_weight = 1.0 + ((idx + 1) / num_events) * 2.0
 
             # Track unique products viewed
-            if event.product_id and (event_type == EventType.VIEW_PRODUCT or is_enrollment):
+            if event.product_id and (event_type == EventType.VIEW_PRODUCT or is_enrollment or is_completion):
                 product_ids_seen.add(str(event.product_id))
+
+            c_title = product_obj.title if product_obj else meta.get('course_title')
 
             # Record titles, prices, difficulties, and durations
             if product_obj:
-                summary.last_viewed_product_title = product_obj.title
+                if not is_unenrollment:
+                    summary.last_viewed_product_title = product_obj.title
+                elif summary.last_viewed_product_title == product_obj.title:
+                    summary.last_viewed_product_title = None
+
                 if product_obj.price is not None:
                     summary.viewed_prices.append(float(product_obj.price))
 
@@ -184,9 +222,13 @@ class BehaviorAgent:
                 if getattr(product_obj, 'duration_hours', None) is not None:
                     summary.viewed_durations.append(float(product_obj.duration_hours))
 
-                if product_obj.title in summary.recent_product_titles:
-                    summary.recent_product_titles.remove(product_obj.title)
-                summary.recent_product_titles.insert(0, product_obj.title)
+                if not is_unenrollment:
+                    if product_obj.title in summary.recent_product_titles:
+                        summary.recent_product_titles.remove(product_obj.title)
+                    summary.recent_product_titles.insert(0, product_obj.title)
+                else:
+                    if product_obj.title in summary.recent_product_titles:
+                        summary.recent_product_titles.remove(product_obj.title)
 
                 if is_enrollment:
                     if product_obj.title in summary.enrolled_product_titles:
@@ -196,19 +238,53 @@ class BehaviorAgent:
                     if str(event.product_id) not in summary.enrolled_product_ids:
                         summary.enrolled_product_ids.append(str(event.product_id))
 
+            if is_unenrollment:
+                summary.unenrollment_events += 1
+                if c_title:
+                    if c_title in summary.enrolled_product_titles:
+                        summary.enrolled_product_titles.remove(c_title)
+                    if c_title in summary.recent_product_titles:
+                        summary.recent_product_titles.remove(c_title)
+                    if summary.last_viewed_product_title == c_title:
+                        summary.last_viewed_product_title = None
+                    if c_title not in summary.unenrolled_product_titles:
+                        summary.unenrolled_product_titles.append(c_title)
+                
+                if event.product_id:
+                    pid_str = str(event.product_id)
+                    if pid_str in summary.enrolled_product_ids:
+                        summary.enrolled_product_ids.remove(pid_str)
+                    if pid_str not in summary.unenrolled_product_ids:
+                        summary.unenrolled_product_ids.append(pid_str)
+                
+                if category:
+                    if category not in summary.unenrolled_categories:
+                        summary.unenrolled_categories.append(category)
+                    summary.categories_explored[category] = 0
+
             # Track categories explored with intent weights and recency
             if category:
-                summary.last_viewed_category = category
-                base_w = 1
-                if is_enrollment:
-                    base_w = 10
-                elif event_type in (EventType.ADD_TO_CART, EventType.WISHLIST):
-                    base_w = 5
-                elif event_type == EventType.VIEW_PRODUCT:
-                    base_w = 3
-                
-                weighted_val = round(base_w * recency_weight)
-                summary.categories_explored[category] = summary.categories_explored.get(category, 0) + weighted_val
+                if not is_unenrollment:
+                    summary.last_viewed_category = category
+                    base_w = 1
+                    if is_completion:
+                        base_w = 15
+                        summary.completion_counts[category] = summary.completion_counts.get(category, 0) + 1
+                    elif is_re_enrollment:
+                        base_w = 60
+                    elif is_enrollment:
+                        base_w = 50
+                    elif event_type in (EventType.ADD_TO_CART, EventType.WISHLIST):
+                        base_w = 5
+                    elif event_type == EventType.VIEW_PRODUCT:
+                        base_w = 3
+                    
+                    weighted_val = round(base_w * recency_weight)
+                    current_val = summary.categories_explored.get(category, 0)
+                    summary.categories_explored[category] = max(0, current_val + weighted_val)
+                elif summary.last_viewed_category == category:
+                    summary.last_viewed_category = None
+                    summary.categories_explored[category] = 0
                 
                 if last_category and last_category != category:
                     category_switch_count += 1
@@ -233,6 +309,8 @@ class BehaviorAgent:
             # Count enrollment events
             if is_enrollment:
                 summary.enrollment_events += 1
+            elif is_unenrollment and summary.enrollment_events > 0:
+                summary.enrollment_events -= 1
             
             # Count repeat visits
             if event_type == EventType.REPEAT_VISIT:
@@ -291,7 +369,7 @@ class BehaviorAgent:
         
         # Recent event types (last 20)
         summary.recent_event_types = [
-            event.event_type.value for event in events[-20:]
+            event.event_type.value if hasattr(event.event_type, 'value') else str(event.event_type) for event in events[-20:]
         ]
         
         return summary

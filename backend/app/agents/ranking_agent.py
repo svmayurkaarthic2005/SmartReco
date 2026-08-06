@@ -110,23 +110,69 @@ class RankingAgent:
                     candidates  # Pass all candidates for normalization
                 )
                 
-                # Calculate category boost (multi-domain support: boost proportional to explored categories)
+                # 1. Enrolled Track Boost: Boost courses in user's active enrolled categories
+                enrollment_boost = 0.0
+                enrolled_titles = [t.lower() for t in getattr(summary, 'enrolled_product_titles', [])]
+                enrolled_ids = getattr(summary, 'enrolled_product_ids', [])
+                
+                # Deduce enrolled categories from db_products or candidate
+                enrolled_cats = set()
+                for eid in enrolled_ids:
+                    ep = db_products.get(eid)
+                    if ep and ep.category:
+                        enrolled_cats.add(ep.category.lower())
+                
+                if candidate.category and candidate.category.lower() in enrolled_cats:
+                    enrollment_boost = 0.35
+                
+                # If user is ALREADY enrolled in this exact product, penalty so NEXT STEPS rank higher
+                already_enrolled_penalty = -0.30 if candidate.product_id in enrolled_ids else 0.0
+
+                # 2. Unenrollment Penalty: if user explicitly dropped this course (by UUID or title) or category, penalize so fresh alternatives are recommended
+                unenrolled_ids_lower = [str(pid).lower() for pid in getattr(summary, 'unenrolled_product_ids', [])]
+                unenrolled_titles_lower = [t.lower() for t in getattr(summary, 'unenrolled_product_titles', [])]
+                unenrolled_cats = [c.lower() for c in getattr(summary, 'unenrolled_categories', [])]
+
+                is_unenrolled_course = (
+                    str(candidate.product_id).lower() in unenrolled_ids_lower
+                    or candidate.title.lower() in unenrolled_titles_lower
+                )
+                
+                unenrolled_course_penalty = -1.0 if is_unenrolled_course else 0.0
+                unenrolled_cat_penalty = -0.35 if (candidate.category and candidate.category.lower() in unenrolled_cats and candidate.category.lower() not in enrolled_cats) else 0.0
+
+                # 3. Completion Boost: if user completed lessons/modules in this category
+                completion_boost = 0.0
+                completion_counts = getattr(summary, 'completion_counts', {})
+                if candidate.category and completion_counts:
+                    comp_key = next((k for k in completion_counts if k.lower() == candidate.category.lower()), None)
+                    if comp_key:
+                        completions = completion_counts[comp_key]
+                        total_completions = max(1, sum(completion_counts.values()))
+                        completion_boost = min(0.30, 0.15 + (completions / total_completions) * 0.15)
+
+                # 4. Category & Recency Boost
                 cat_boost = 0.0
                 last_viewed_cat = getattr(summary, 'last_viewed_category', None)
                 
                 if candidate.category:
                     if last_viewed_cat and candidate.category.lower() == last_viewed_cat.lower():
-                        cat_boost = 0.30
+                        cat_boost = 0.25
                     elif summary.categories_explored:
-                        # Check case-insensitive match in categories_explored
                         matching_key = next((k for k in summary.categories_explored if k.lower() == candidate.category.lower()), None)
                         if matching_key:
                             total_w = max(1, sum(summary.categories_explored.values()))
                             cat_w = summary.categories_explored[matching_key]
                             cat_boost = 0.10 + (cat_w / total_w) * 0.15
 
-                # Weighted sum + category boost
-                final_score = min(1.0, (
+                # 5. Re-enrollment commitment boost
+                re_enroll_boost = 0.0
+                re_enrolled_cats = getattr(summary, 're_enrolled_categories', [])
+                if candidate.category and any(c.lower() == candidate.category.lower() for c in re_enrolled_cats):
+                    re_enroll_boost = 0.25
+
+                # Weighted sum + boosts + penalties
+                raw_score = (
                     scores['semantic'] * self.WEIGHT_SEMANTIC +
                     scores['difficulty_match'] * self.WEIGHT_DIFFICULTY_MATCH +
                     scores['learning_progression'] * self.WEIGHT_LEARNING_PROGRESSION +
@@ -134,8 +180,20 @@ class RankingAgent:
                     scores['tag_overlap'] * self.WEIGHT_TAG_OVERLAP +
                     scores['freshness'] * self.WEIGHT_FRESHNESS +
                     scores['duration_fit'] * 0.10 +
-                    cat_boost
-                ))
+                    enrollment_boost +
+                    completion_boost +
+                    cat_boost +
+                    re_enroll_boost +
+                    already_enrolled_penalty +
+                    unenrolled_course_penalty +
+                    unenrolled_cat_penalty
+                )
+
+                # Hard clamp final_score = 0.0 for dropped courses
+                if is_unenrolled_course:
+                    final_score = 0.0
+                else:
+                    final_score = min(1.0, max(0.05, raw_score))
                 
                 ranked_product = RankedProduct(
                     product_id=candidate.product_id,
@@ -152,6 +210,11 @@ class RankingAgent:
                 
                 ranked_products.append(ranked_product)
             
+            # Exclude zero-score (dropped) courses if non-zero candidates exist
+            valid_ranked = [p for p in ranked_products if p.final_score > 0.0]
+            if valid_ranked:
+                ranked_products = valid_ranked
+
             # Sort by final_score descending
             ranked_products.sort(key=lambda x: x.final_score, reverse=True)
             
@@ -425,18 +488,12 @@ class RankingAgent:
         Score candidate based on user's preferred course duration depth.
         """
         pref_duration = getattr(summary, 'avg_duration_preference', 0.0)
-        if pref_duration <= 0 or candidate.product.duration_hours is None:
+        # CandidateProduct doesn't carry duration_hours; use neutral score if no preference
+        if pref_duration <= 0:
             return 0.80  # Neutral score
 
-        cand_duration = float(candidate.product.duration_hours)
-        diff = abs(cand_duration - pref_duration)
-
-        if diff <= 10.0:
-            return 1.0
-        elif diff <= 20.0:
-            return 0.70
-        else:
-            return 0.40
+        # candidate.price is a proxy — if candidate doesn't have duration we return neutral
+        return 0.80
     
     def _is_adjacent_difficulty(self, difficulty1: str, difficulty2: str) -> bool:
         """Check if two difficulty levels are adjacent (one step apart)"""

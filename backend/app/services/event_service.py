@@ -60,7 +60,7 @@ async def bulk_insert_events(
                 "product_id": event.product_id,
                 "search_query": event.search_query,
                 "dwell_time": event.dwell_time,
-                "event_metadata": event.metadata,
+                "event_metadata": event.metadata or getattr(event, 'event_metadata', None),
                 "timestamp": timestamp
             }
             event_dicts.append(event_dict)

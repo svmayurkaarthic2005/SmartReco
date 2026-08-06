@@ -21,25 +21,38 @@ class ChromaClient:
     def client(self):
         """Lazy-load ChromaDB client with persistent storage"""
         if self._client is None:
+            import socket
+            is_http_available = False
             try:
-                # First try HTTP client for production ChromaDB server
-                print(f"Connecting to ChromaDB at {settings.chroma_host}:{settings.chroma_port}")
-                http_client = chromadb.HttpClient(
-                    host=settings.chroma_host,
-                    port=settings.chroma_port
-                )
-                # Test connection
-                http_client.heartbeat()
-                self._client = http_client
-                print("✓ ChromaDB HTTP connection successful")
-            except Exception as e:
-                # Fallback to persistent local storage
-                print(f"ChromaDB HTTP server unavailable ({e})")
+                # Fast socket probe (200ms timeout) to check if ChromaDB HTTP server is actually listening
+                with socket.create_connection((settings.chroma_host, settings.chroma_port), timeout=0.2):
+                    is_http_available = True
+            except (OSError, TimeoutError):
+                is_http_available = False
+
+            if is_http_available:
+                try:
+                    print(f"Connecting to ChromaDB HTTP server at {settings.chroma_host}:{settings.chroma_port}")
+                    http_client = chromadb.HttpClient(
+                        host=settings.chroma_host,
+                        port=settings.chroma_port,
+                        settings=ChromaSettings(anonymized_telemetry=False)
+                    )
+                    http_client.heartbeat()
+                    self._client = http_client
+                    print("✓ ChromaDB HTTP connection successful")
+                except Exception as e:
+                    print(f"ChromaDB HTTP connection failed: {e}")
+                    is_http_available = False
+
+            if not is_http_available or self._client is None:
                 print("Using persistent ChromaDB with local storage at ./chroma")
-                self._client = chromadb.PersistentClient(path="./chroma")
+                self._client = chromadb.PersistentClient(
+                    path="./chroma",
+                    settings=ChromaSettings(anonymized_telemetry=False)
+                )
         return self._client
 
-    
     def get_collection(self):
         """Get or create the products collection"""
         if self._collection is None:
@@ -54,7 +67,7 @@ class ChromaClient:
                     metadata={"description": "SmartReco product embeddings"}
                 )
         return self._collection
-    
+
     async def search_products(
         self,
         query_embedding: List[float],
@@ -62,62 +75,47 @@ class ChromaClient:
         where: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
         """
-        Search for products using vector similarity.
-        
-        Args:
-            query_embedding: Query vector embedding
-            n_results: Number of results to return
-            where: Metadata filter (e.g., {"difficulty": "beginner"})
-            
-        Returns:
-            List of product dictionaries with metadata and scores
-            
-        Example:
-            >>> results = await client.search_products(
-            ...     query_embedding=[0.1, 0.2, ...],
-            ...     n_results=10,
-            ...     where={"difficulty": "beginner"}
-            ... )
+        Search for products using vector similarity (executed in thread pool).
         """
-        collection = self.get_collection()
-        
-        # Query ChromaDB
-        results = collection.query(
-            query_embeddings=[query_embedding],
-            n_results=n_results,
-            where=where,
-            include=["metadatas", "distances", "documents"]
-        )
-        
-        # Format results
-        formatted_results = []
-        
-        if results and results['ids'] and results['ids'][0]:
-            ids = results['ids'][0]
-            metadatas = results['metadatas'][0] if results['metadatas'] else []
-            distances = results['distances'][0] if results['distances'] else []
-            documents = results['documents'][0] if results['documents'] else []
-            
-            for i, product_id in enumerate(ids):
-                metadata = metadatas[i] if i < len(metadatas) else {}
-                distance = distances[i] if i < len(distances) else 1.0
-                document = documents[i] if i < len(documents) else ""
-                
-                result = {
-                    'id': product_id,
-                    'product_id': product_id,
-                    'title': metadata.get('title', ''),
-                    'description': document or metadata.get('description', ''),
-                    'category': metadata.get('category', ''),
-                    'difficulty': metadata.get('difficulty', ''),
-                    'price': metadata.get('price', 0.0),
-                    'tags': metadata.get('tags', '').split(',') if metadata.get('tags') else [],
-                    'distance': float(distance),
-                    'similarity_score': 1.0 - float(distance)  # Convert distance to similarity
-                }
-                formatted_results.append(result)
-        
-        return formatted_results
+        import asyncio
+        loop = asyncio.get_running_loop()
+
+        def _do_search():
+            collection = self.get_collection()
+            results = collection.query(
+                query_embeddings=[query_embedding],
+                n_results=n_results,
+                where=where,
+                include=["metadatas", "distances", "documents"]
+            )
+            formatted_results = []
+            if results and results['ids'] and results['ids'][0]:
+                ids = results['ids'][0]
+                metadatas = results['metadatas'][0] if results['metadatas'] else []
+                distances = results['distances'][0] if results['distances'] else []
+                documents = results['documents'][0] if results['documents'] else []
+
+                for i, product_id in enumerate(ids):
+                    metadata = metadatas[i] if i < len(metadatas) else {}
+                    distance = distances[i] if i < len(distances) else 1.0
+                    document = documents[i] if i < len(documents) else ""
+
+                    result = {
+                        'id': product_id,
+                        'product_id': product_id,
+                        'title': metadata.get('title', ''),
+                        'description': document or metadata.get('description', ''),
+                        'category': metadata.get('category', ''),
+                        'difficulty': metadata.get('difficulty', ''),
+                        'price': metadata.get('price', 0.0),
+                        'tags': metadata.get('tags', '').split(',') if metadata.get('tags') else [],
+                        'distance': float(distance),
+                        'similarity_score': 1.0 - float(distance)
+                    }
+                    formatted_results.append(result)
+            return formatted_results
+
+        return await loop.run_in_executor(None, _do_search)
     
     async def add_product(
         self,

@@ -285,5 +285,7 @@ async def get_redis_client() -> redis.Redis:
     return await redis.from_url(
         settings.redis_url,
         password=settings.redis_password,
-        decode_responses=True
+        decode_responses=True,
+        socket_connect_timeout=0.5,
+        socket_timeout=0.5
     )

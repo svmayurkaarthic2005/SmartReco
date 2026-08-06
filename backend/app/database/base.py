@@ -93,7 +93,9 @@ async def get_redis():
         password=settings.redis_password,
         encoding="utf-8",
         decode_responses=True,
-        max_connections=settings.redis_max_connections
+        max_connections=settings.redis_max_connections,
+        socket_connect_timeout=0.5,
+        socket_timeout=0.5
     )
     try:
         yield client

@@ -15,10 +15,11 @@ from app.agents.ranking_agent import RankedProduct
 from app.observability.langsmith_client import trace_run
 
 
-# Initialize Mesh API client at module level
+# Initialize Mesh API client at module level (max_retries=0 so slow gateway calls fail fast to fallback)
 mesh_client = openai.AsyncOpenAI(
     api_key=settings.mesh_api_key,
-    base_url=settings.mesh_api_base_url
+    base_url=settings.mesh_api_base_url,
+    max_retries=0
 )
 
 
@@ -124,15 +125,19 @@ Output Format:
                 # Build user prompt
                 user_prompt = self._build_user_prompt(summary, persona, ranked_products)
                 
-                # Call Mesh API
-                response = await mesh_client.chat.completions.create(
-                    model=settings.mesh_model,
-                    messages=[
-                        {"role": "system", "content": self.SYSTEM_PROMPT},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    temperature=settings.mesh_temperature,
-                    max_tokens=settings.mesh_max_tokens
+                # Call Mesh API with 8-second timeout fallback
+                import asyncio
+                response = await asyncio.wait_for(
+                    mesh_client.chat.completions.create(
+                        model=settings.mesh_model,
+                        messages=[
+                            {"role": "system", "content": self.SYSTEM_PROMPT},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        temperature=settings.mesh_temperature,
+                        max_tokens=settings.mesh_max_tokens
+                    ),
+                    timeout=4.0
                 )
                 
                 # Calculate latency
@@ -182,16 +187,16 @@ Output Format:
         """
         Build user prompt with context and constraints.
         """
-        # Get top 3 categories
+        # Get top categories, prioritizing the top-ranked recommendation category
+        primary_category = ranked_products[0].category if ranked_products else "various topics"
         if summary.categories_explored:
-            top_categories = sorted(
-                summary.categories_explored.items(),
-                key=lambda x: x[1],
-                reverse=True
-            )[:3]
-            categories_str = ", ".join([cat for cat, _ in top_categories])
+            sorted_cats = [cat for cat, _ in sorted(summary.categories_explored.items(), key=lambda x: x[1], reverse=True)]
+            if primary_category in sorted_cats:
+                sorted_cats.remove(primary_category)
+            sorted_cats.insert(0, primary_category)
+            categories_str = ", ".join(sorted_cats[:3])
         else:
-            categories_str = "various topics"
+            categories_str = primary_category
         
         # Get recent search queries
         recent_queries = ", ".join(summary.search_queries[-3:]) if summary.search_queries else "general learning"
@@ -207,22 +212,48 @@ Output Format:
             }
             for p in ranked_products
         ], indent=2)
+
+        # Build enrollment context to inform the LLM about unenroll/re-enroll/completion signals
+        enrollment_ctx_parts = []
+        if summary.enrolled_product_titles:
+            enrollment_ctx_parts.append(f"Currently enrolled in: {', '.join(summary.enrolled_product_titles[:3])}")
+        if getattr(summary, 're_enrollment_events', 0) > 0:
+            re_cats = getattr(summary, 're_enrolled_categories', [])
+            re_cats_str = (', '.join(re_cats[:3])) if re_cats else 'unknown'
+            enrollment_ctx_parts.append(
+                f"Re-enrolled {summary.re_enrollment_events} time(s) in: {re_cats_str} — strong commitment signal"
+            )
+        completion_counts = getattr(summary, 'completion_counts', {})
+        if completion_counts:
+            comp_str = ", ".join(
+                f"{cat}: {count} lesson(s) completed"
+                for cat, count in sorted(completion_counts.items(), key=lambda x: -x[1])[:3]
+            )
+            enrollment_ctx_parts.append(f"Lesson completions: {comp_str}")
+        # Check if last meaningful event was an unenroll (user dropped a course)
+        if summary.enrollment_events == 0 and getattr(summary, 're_enrollment_events', 0) == 0 and summary.total_events > 3:
+            enrollment_ctx_parts.append("Note: user has unenrolled from courses recently — suggest a fresh start or alternative tracks")
+        enrollment_context = "\n".join(f"- {p}" for p in enrollment_ctx_parts) if enrollment_ctx_parts else "- No enrollment activity yet"
         
         prompt = f"""Learner Persona: {persona.persona.value} (confidence: {persona.confidence:.0%})
 
 Behavior Summary:
-- Explored categories: {categories_str}
+- Primary Category: {primary_category}
+- All Explored categories: {categories_str}
 - Searched for: {recent_queries}
 - Average dwell time: {summary.avg_dwell_time:.0f}s
 - Total events: {summary.total_events}
+
+Enrollment & Progress Context:
+{enrollment_context}
 
 Available courses (use ONLY these):
 {products_json}
 
 Generate a personalized learning recommendation in JSON format:
 {{
-  "learning_goal": "Specific learning objective based on their behavior",
-  "personalized_story": "2-3 sentences describing their learning journey so far and next steps",
+  "learning_goal": "Specific learning objective focused on {primary_category}",
+  "personalized_story": "2-3 sentences describing their learning journey in {primary_category} and next steps",
   "roadmap": ["Course Title 1", "Course Title 2", "Course Title 3"],
   "product_explanations": {{
     "product-id": "One sentence why this course fits their journey"
@@ -277,13 +308,13 @@ Remember: Use ONLY course titles and IDs from the list above."""
         """
         Create safe fallback narrative if AI generation fails.
         """
-        # Get top category
-        top_category = "your interests"
-        if summary.categories_explored:
-            top_category = max(
-                summary.categories_explored.items(),
-                key=lambda x: x[1]
-            )[0]
+        # Top category matches the #1 ranked recommendation product category
+        top_category = ranked_products[0].category if ranked_products else "your interests"
+        if not top_category or top_category.lower() == 'general':
+            if summary.last_viewed_category:
+                top_category = summary.last_viewed_category
+            elif summary.categories_explored:
+                top_category = max(summary.categories_explored.items(), key=lambda x: x[1])[0]
         
         return NarrativeResult(
             persona_display=self._format_persona_display(persona),
@@ -291,7 +322,7 @@ Remember: Use ONLY course titles and IDs from the list above."""
             personalized_story=f"Based on your exploration of {top_category}, we've curated courses that match your learning style and pace. Continue building your expertise with these carefully selected recommendations.",
             roadmap=[p.title for p in ranked_products[:3]],
             product_explanations={
-                p.product_id: f"Recommended based on your interest in {top_category}"
+                p.product_id: f"Recommended next step for your enrolled & completed track in {p.category}"
                 for p in ranked_products[:5]
             },
             motivational_cta="Start your learning journey today!"

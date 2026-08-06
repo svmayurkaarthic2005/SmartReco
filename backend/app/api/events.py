@@ -72,8 +72,14 @@ async def create_events_batch(
             )
     
     # Process immediately instead of background task to avoid session issues
+    # Use a short timeout so slow DB inserts don't block the response
+    import asyncio
     try:
-        await bulk_insert_events(batch.events, db)
+        await asyncio.wait_for(bulk_insert_events(batch.events, db), timeout=8.0)
+    except asyncio.TimeoutError:
+        # Log and return success anyway — events will be silently dropped (acceptable for telemetry)
+        import logging
+        logging.getLogger(__name__).warning(f"Event batch insert timed out for {len(batch.events)} events")
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -119,16 +125,19 @@ async def create_single_event(
     # Insert single event (blocking)
     await bulk_insert_events([event], db)
     
+    # Safely get event_type value (might be Enum or str)
+    event_type_val = event.event_type.value if hasattr(event.event_type, 'value') else str(event.event_type)
+    
     # Return event response
     return EventResponse(
-        id=str(uuid.uuid4()),  # In production, retrieve the actual inserted ID
+        id=str(uuid.uuid4()),
         user_id=str(event.user_id),
         session_id=event.session_id,
-        event_type=event.event_type.value,
+        event_type=event_type_val,
         product_id=str(event.product_id) if event.product_id else None,
         search_query=event.search_query,
         dwell_time=event.dwell_time,
-        metadata=getattr(event, "event_metadata", None),
+        metadata=event.metadata or getattr(event, 'event_metadata', None),
         timestamp=event.timestamp.isoformat() + "Z"
     )
 
@@ -164,7 +173,7 @@ async def get_my_events(
             id=str(event.id),
             user_id=str(event.user_id),
             session_id=event.session_id,
-            event_type=event.event_type.value,
+            event_type=event.event_type.value if hasattr(event.event_type, 'value') else str(event.event_type),
             product_id=str(event.product_id) if event.product_id else None,
             search_query=event.search_query,
             dwell_time=event.dwell_time,
@@ -223,7 +232,7 @@ async def get_user_events_admin(
             id=str(event.id),
             user_id=str(event.user_id),
             session_id=event.session_id,
-            event_type=event.event_type.value,
+            event_type=event.event_type.value if hasattr(event.event_type, 'value') else str(event.event_type),
             product_id=str(event.product_id) if event.product_id else None,
             search_query=event.search_query,
             dwell_time=event.dwell_time,

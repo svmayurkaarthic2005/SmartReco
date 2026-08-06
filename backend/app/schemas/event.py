@@ -19,6 +19,7 @@ class EventCreate(BaseModel):
     search_query: Optional[str] = Field(None, max_length=200, description="Search query text")
     dwell_time: Optional[float] = Field(None, ge=0, description="Time spent in seconds")
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional event metadata")
+    event_metadata: Optional[Dict[str, Any]] = Field(None, description="Additional event metadata alias")
     timestamp: datetime = Field(default_factory=datetime.utcnow, description="Event timestamp")
     
     @field_validator("search_query")

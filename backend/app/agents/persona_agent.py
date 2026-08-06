@@ -54,7 +54,8 @@ class PersonaAgent:
                 settings.redis_url,
                 password=settings.redis_password,
                 decode_responses=True,
-                socket_connect_timeout=1.0
+                socket_connect_timeout=0.5,
+                socket_timeout=0.5
             )
         return self.redis_client
     
@@ -279,9 +280,10 @@ class PersonaAgent:
         if summary.total_events < 5:
             score += 1
 
-        # No enrollment events (+1)
-        # Additional heuristic: no enrollment for extended period
-        if summary.enrollment_events == 0:
+        # No enrollment events (+1) — but skip if user has re-enrolled.
+        # A re-enrolling user is actively engaged, not a drop-off risk.
+        has_re_enrolled = getattr(summary, 're_enrollment_events', 0) > 0
+        if summary.enrollment_events == 0 and not has_re_enrolled:
             score += 1
 
         return score

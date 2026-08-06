@@ -88,8 +88,10 @@ class RetrievalPlanner:
             # Determine n_results based on persona
             n_results = self._get_n_results(persona)
             
-            # Exclude already-enrolled products from recommendations (recommend next steps instead)
-            exclude_product_ids = list(getattr(summary, 'enrolled_product_ids', []))
+            # Exclude already-enrolled products & explicitly dropped products to recommend fresh next steps
+            enrolled_ids = list(getattr(summary, 'enrolled_product_ids', []))
+            unenrolled_ids = list(getattr(summary, 'unenrolled_product_ids', []))
+            exclude_product_ids = list(set(enrolled_ids + unenrolled_ids))
             
             # Extract boost keywords from search queries
             boost_keywords = self._extract_boost_keywords(summary.search_queries)
@@ -116,9 +118,10 @@ class RetrievalPlanner:
         """
         parts = []
         
-        # Last viewed product (highest immediate intent)
+        # Last viewed product (highest immediate intent, ignoring dropped courses)
+        unenrolled_titles = getattr(summary, 'unenrolled_product_titles', [])
         last_viewed = getattr(summary, 'last_viewed_product_title', None)
-        if last_viewed:
+        if last_viewed and last_viewed not in unenrolled_titles:
             parts.append(f"Next recommendations after viewing: {last_viewed}")
 
         # Enrolled courses
@@ -323,11 +326,13 @@ class VectorRetrievalAgent:
                     where=chroma_filter
                 )
                 
-                # Step 4: Convert to CandidateProduct and filter exclusions
+                # Step 4: Convert to CandidateProduct and filter exclusions (case-insensitive ID & title check)
+                exclude_ids_lower = {str(pid).lower() for pid in plan.exclude_product_ids}
                 for result in chroma_results:
                     product_id = result.get('id') or result.get('product_id')
+                    title = result.get('title', '')
                     
-                    if product_id not in plan.exclude_product_ids:
+                    if str(product_id).lower() not in exclude_ids_lower:
                         raw_dist = float(result.get('distance', 0.5))
                         # Convert ChromaDB cosine distance (0.0 to 2.0) to similarity score (0.0 to 1.0)
                         similarity_score = max(0.0, min(1.0, 1.0 - (raw_dist / 2.0)))
@@ -385,43 +390,37 @@ class VectorRetrievalAgent:
         """
         Fallback retrieval using PostgreSQL.
         
-        Query products table ordered by created_at desc, limit 10.
-        Apply category_filter if set.
+        Query products table ordered by created_at desc, limit 20 (then cap to 15).
+        Apply category_filter if set to return domain-relevant courses.
         """
-        # Build query
-        stmt = select(Product).order_by(Product.created_at.desc()).limit(10)
-        
-        # Apply filters
-        if plan.difficulty_filter:
-            stmt = stmt.where(Product.difficulty_level == plan.difficulty_filter)
-        
-        if plan.category_filter:
-            stmt = stmt.where(Product.category == plan.category_filter)
-        
-        # Exclude already-viewed products
-        if plan.exclude_product_ids:
-            # Convert string IDs to UUIDs for query
-            from uuid import UUID
-            try:
-                exclude_uuids = [UUID(pid) for pid in plan.exclude_product_ids]
-                stmt = stmt.where(Product.id.notin_(exclude_uuids))
-            except ValueError:
-                # If conversion fails, skip exclusion
-                pass
-        
-        # Execute query
-        result = await db.execute(stmt)
+        from uuid import UUID
+
+        def build_stmt(with_category: bool):
+            stmt = select(Product).order_by(Product.created_at.desc()).limit(20)
+            if plan.difficulty_filter:
+                stmt = stmt.where(Product.difficulty_level == plan.difficulty_filter)
+            if with_category and plan.category_filter:
+                stmt = stmt.where(Product.category == plan.category_filter)
+            if plan.exclude_product_ids:
+                try:
+                    exclude_uuids = [UUID(pid) for pid in plan.exclude_product_ids]
+                    stmt = stmt.where(Product.id.notin_(exclude_uuids))
+                except ValueError:
+                    pass
+            return stmt
+
+        # First try with category filter applied
+        result = await db.execute(build_stmt(with_category=True))
         products = result.scalars().all()
 
-        if not products:
-            # Fallback query without strict filters
-            fallback_stmt = select(Product).order_by(Product.created_at.desc()).limit(10)
-            result = await db.execute(fallback_stmt)
+        # If not enough, fall back to no category filter
+        if len(products) < 5:
+            result = await db.execute(build_stmt(with_category=False))
             products = result.scalars().all()
-        
+
         # Convert to CandidateProduct
         candidates = []
-        for product in products:
+        for product in products[:15]:
             candidate = CandidateProduct(
                 product_id=str(product.id),
                 title=product.title,
@@ -430,7 +429,7 @@ class VectorRetrievalAgent:
                 difficulty=product.difficulty_level.value,
                 price=product.price,
                 tags=product.tags,
-                similarity_score=0.0  # No similarity score for fallback
+                similarity_score=0.0
             )
             candidates.append(candidate)
         

@@ -70,48 +70,43 @@ class RecommendationService:
         self.redis = redis_client
         self.cache_ttl = 900  # 15 minutes in seconds
     
+    async def _get_cached_data_dict(self, user_id: uuid.UUID) -> Optional[dict]:
+        """
+        Get cached recommendation dict from Redis (Layer 1) or PostgreSQL recommendation_cache (Layer 2).
+        """
+        cache_key = f"reco_cache:{user_id}"
+        # Layer 1: Try Redis
+        try:
+            if self.redis:
+                cached_json = await self.redis.get(cache_key)
+                if cached_json:
+                    return json.loads(cached_json)
+        except Exception:
+            pass
+
+        # Layer 2: Fall back to PostgreSQL recommendation_cache table
+        try:
+            from app.models.recommendation_cache import RecommendationCache
+            stmt = select(RecommendationCache).where(RecommendationCache.user_id == user_id)
+            result = await self.db.execute(stmt)
+            entry = result.scalar_one_or_none()
+            if entry and entry.cached_recommendation:
+                return entry.cached_recommendation
+        except Exception as e:
+            logger.warning(f"DB cache read error: {e}")
+
+        return None
+
     async def should_regenerate(self, user_id: uuid.UUID) -> bool:
         """
         Determine if recommendation should be regenerated.
-        
-        Returns True if ANY of these conditions are met:
-        1. No cache exists (cache miss)
-        2. Event hash differs (user behavior changed)
-        3. Cached persona differs from current persona (persona changed)
-        4. Cache older than 15 minutes (stale)
-        
-        Args:
-            user_id: User UUID
-            
-        Returns:
-            True if should regenerate, False if cache is valid
-            
-        Example:
-            >>> service = RecommendationService(db, redis)
-            >>> should_regen = await service.should_regenerate(user_id)
-            >>> if should_regen:
-            ...     output = await service.get_or_generate(user_id)
         """
         # 1. Compute current event hash
         current_event_hash = await compute_event_hash(user_id, self.db)
         
-        # 2. Check Redis cache
-        cache_key = f"reco_cache:{user_id}"
-        try:
-            cached_json = await self.redis.get(cache_key)
-        except Exception:
-            # Redis unavailable → regenerate
-            return True
-        
-        # Cache miss → regenerate
-        if not cached_json:
-            return True
-        
-        # Parse cached data
-        try:
-            cached_data = json.loads(cached_json)
-        except json.JSONDecodeError:
-            # Corrupted cache → regenerate
+        # 2. Check cache (Redis or PostgreSQL)
+        cached_data = await self._get_cached_data_dict(user_id)
+        if not cached_data:
             return True
         
         # 3. Check event hash match
@@ -120,32 +115,11 @@ class RecommendationService:
             # User behavior changed → regenerate
             return True
         
-        # 4. Check persona match
-        persona_key = f"persona:{user_id}"
-        try:
-            current_persona_json = await self.redis.get(persona_key)
-        except Exception:
-            current_persona_json = None
-        
-        if current_persona_json:
-            try:
-                current_persona_data = json.loads(current_persona_json)
-                current_persona = current_persona_data.get("persona")
-                cached_persona = cached_data.get("persona")
-                
-                if current_persona and cached_persona and current_persona != cached_persona:
-                    # Persona changed → regenerate
-                    return True
-            except json.JSONDecodeError:
-                pass  # Can't compare, continue with time check
-        
-        # 5. Check timestamp (15 min expiration)
+        # 4. Check timestamp (15 min expiration)
         generated_at_str = cached_data.get("generated_at")
         if generated_at_str:
             try:
-                # Parse ISO format; strip timezone info for naive UTC comparison
                 generated_at_raw = datetime.fromisoformat(generated_at_str.replace('Z', '+00:00'))
-                # Normalize to naive UTC (remove tzinfo if present)
                 if generated_at_raw.tzinfo is not None:
                     from datetime import timezone
                     generated_at = generated_at_raw.astimezone(timezone.utc).replace(tzinfo=None)
@@ -158,7 +132,6 @@ class RecommendationService:
                     # Stale cache → regenerate
                     return True
             except (ValueError, TypeError):
-                # Can't parse timestamp → regenerate to be safe
                 return True
         
         # Cache is valid
@@ -171,66 +144,31 @@ class RecommendationService:
     ) -> RecommendationOutput:
         """
         Get cached recommendation or generate new one.
-        
-        Smart logic:
-        - If cache is valid → deserialize and return
-        - If should regenerate → run workflow, store, cache, return
-        
-        Args:
-            user_id: User UUID
-            user_name: User name for personalization (optional)
-            
-        Returns:
-            RecommendationOutput with full recommendation data
-            
-        Raises:
-            HTTPException: If workflow fails and no cache available
-            
-        Example:
-            >>> service = RecommendationService(db, redis)
-            >>> output = await service.get_or_generate(user_id, "John")
-            >>> print(output.persona)
-            focused_builder
         """
         # Check if regeneration is needed
         needs_regeneration = await self.should_regenerate(user_id)
         
         if not needs_regeneration:
-            # Load from Redis cache
-            try:
-                cache_key = f"reco_cache:{user_id}"
-                cached_json = await self.redis.get(cache_key)
-                
-                if cached_json:
-                    try:
-                        cached_data = json.loads(cached_json)
-                        
-                        # Deserialize to RecommendationOutput
-                        output = self._deserialize_output(cached_data)
-                        return output
-                    except (json.JSONDecodeError, KeyError, TypeError) as e:
-                        # Cache corrupted, fall through to regeneration
-                        logger.warning(f"Cache deserialization failed: {e}")
-            except Exception as e:
-                # Redis unavailable, fall through to regeneration
-                logger.warning(f"Redis cache read failed: {e}")
+            cached_data = await self._get_cached_data_dict(user_id)
+            if cached_data:
+                try:
+                    output = self._deserialize_output(cached_data)
+                    return output
+                except (json.JSONDecodeError, KeyError, TypeError) as e:
+                    logger.warning(f"Cache deserialization failed: {e}")
         
         # Acquire per-user lock to prevent duplicate concurrent workflow runs.
-        # If two requests arrive simultaneously, the second one waits here, then
-        # re-checks the cache after the first finishes — avoiding a double LLM call.
         user_lock = await _get_user_lock(str(user_id))
         async with user_lock:
             # Re-check after acquiring lock (another coroutine may have just generated)
             needs_regeneration = await self.should_regenerate(user_id)
             if not needs_regeneration:
-                try:
-                    cache_key = f"reco_cache:{user_id}"
-                    cached_json = await self.redis.get(cache_key)
-                    if cached_json:
-                        cached_data = json.loads(cached_json)
+                cached_data = await self._get_cached_data_dict(user_id)
+                if cached_data:
+                    try:
                         return self._deserialize_output(cached_data)
-                except Exception:
-                    pass  # Fall through to generate
+                    except Exception:
+                        pass
             
             # Generate new recommendation
             runner = WorkflowRunner(db=self.db, redis_client=self.redis)

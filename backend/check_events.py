@@ -1,30 +1,19 @@
 import asyncio
-from sqlalchemy import select, func
-from app.database.base import get_async_session
-from app.models.event import Event
+from sqlalchemy import select, String
+from app.database.base import AsyncSessionLocal
+from app.models import Event, User, Product
 
-async def check():
-    session = get_async_session()
-    async with session as db:
-        # Get event types count
-        result = await db.execute(
-            select(Event.event_type, func.count(Event.id))
-            .group_by(Event.event_type)
-            .order_by(func.count(Event.id).desc())
-        )
-        print('Event types in database:')
-        for row in result:
-            print(f'  {row[0]}: {row[1]} events')
-        
-        # Get latest 5 events
-        print('\nLatest 5 events:')
-        result = await db.execute(
-            select(Event)
-            .order_by(Event.timestamp.desc())
-            .limit(5)
-        )
-        events = result.scalars().all()
-        for evt in events:
-            print(f'  [{evt.timestamp}] {evt.event_type} - product_id={evt.product_id}')
+async def check_db_events():
+    async with AsyncSessionLocal() as session:
+        users = (await session.execute(select(User))).scalars().all()
+        print(f"Total Users in DB: {len(users)}")
+        for u in users:
+            print(f" - User: {u.name} ({u.email}) [ID: {u.id}]")
 
-asyncio.run(check())
+        products = (await session.execute(select(Product))).scalars().all()
+        print(f"\nTotal Products in DB: {len(products)}")
+        for p in products[:10]:
+            print(f" - Product: id={p.id}, title='{p.title}'")
+
+if __name__ == "__main__":
+    asyncio.run(check_db_events())

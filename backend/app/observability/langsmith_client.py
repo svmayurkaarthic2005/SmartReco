@@ -88,10 +88,14 @@ def trace_run(
     error = None
     start_time = datetime.utcnow()
     
+    import concurrent.futures
+    _executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
+
     try:
-        # Create run
+        # Create run in background thread to avoid blocking network I/O
         try:
-            run = client.create_run(
+            future = _executor.submit(
+                client.create_run,
                 name=name,
                 run_type=run_type,
                 inputs=inputs,
@@ -100,10 +104,11 @@ def trace_run(
                 tags=tags or [],
                 extra=metadata or {}
             )
+            run = future.result(timeout=1.0)
             run_id = getattr(run, "id", None) if run else None
             logger.debug(f"Created LangSmith run: {name} (ID: {run_id})")
         except Exception as e:
-            logger.warning(f"Failed to create LangSmith run '{name}': {e}")
+            logger.warning(f"LangSmith create_run non-fatal timeout/error '{name}': {e}")
             run_id = None
         
         # Yield control back to caller
@@ -119,20 +124,19 @@ def trace_run(
         raise
     
     finally:
-        # Update run with outputs and end time
+        # Update run with outputs and end time in background
         if run_id and client:
             try:
                 end_time = datetime.utcnow()
-                client.update_run(
+                _executor.submit(
+                    client.update_run,
                     run_id=run_id,
                     outputs=outputs or {},
                     end_time=end_time,
                     error=error
                 )
-                
                 latency_ms = (end_time - start_time).total_seconds() * 1000
                 logger.debug(f"Completed LangSmith run: {name} ({latency_ms:.2f}ms)")
-                
             except Exception as e:
                 logger.error(f"Failed to update LangSmith run {run_id}: {e}")
 

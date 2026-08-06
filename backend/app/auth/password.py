@@ -25,12 +25,6 @@ pwd_context = CryptContext(
 def hash_password(plain: str) -> str:
     """
     Hash a plain text password using bcrypt.
-    
-    Args:
-        plain: Plain text password
-        
-    Returns:
-        Hashed password string
     """
     return pwd_context.hash(plain[:72])
 
@@ -38,13 +32,9 @@ def hash_password(plain: str) -> str:
 def verify_password(plain: str, hashed: str) -> bool:
     """
     Verify a plain text password against a hashed password.
-    
-    Args:
-        plain: Plain text password to verify
-        hashed: Hashed password from database
-        
-    Returns:
-        True if password matches, False otherwise
     """
-    return pwd_context.verify(plain[:72], hashed)
+    try:
+        return pwd_context.verify(plain[:72], hashed)
+    except Exception:
+        return False
 

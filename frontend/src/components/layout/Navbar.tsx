@@ -19,9 +19,10 @@ export const Navbar = () => {
 
   const navLinks = [
     { path: '/dashboard', label: 'Dashboard', icon: HiChartBar },
-    { path: '/recommendations', label: 'AI Recommendations', icon: HiSparkles, badge: 'AI' },
-    { path: '/courses', label: 'Browse Courses', icon: HiBookOpen },
-    { path: '/activity', label: 'Your Activity', icon: HiLightningBolt },
+    { path: '/recommendations', label: 'AI Recommendations', icon: HiSparkles },
+    { path: '/courses', label: 'Catalog', icon: HiBookOpen },
+    { path: '/enrolled', label: 'My Courses', icon: HiAcademicCap },
+    { path: '/activity', label: 'Activity Log', icon: HiLightningBolt },
   ]
 
   const isActive = (path: string) => {
@@ -31,31 +32,29 @@ export const Navbar = () => {
   }
 
   return (
-    <header className="bg-white/90 backdrop-blur-md border-b border-gray-200/80 sticky top-0 z-50 shadow-sm transition-all">
+    <header className="bg-white/95 backdrop-blur-md border-b border-gray-200/80 sticky top-0 z-50 shadow-xs transition-all">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16 sm:h-20">
+        <div className="flex justify-between items-center h-16 sm:h-20 gap-4">
 
           {/* Logo & Brand */}
-          <div className="flex items-center gap-8">
-            <Link to="/dashboard" className="flex items-center gap-3 group">
+          <div className="flex items-center gap-4 lg:gap-8 flex-shrink-0">
+            <Link to="/dashboard" className="flex items-center gap-3 group flex-shrink-0">
               <div className="w-10 h-10 sm:w-11 sm:h-11 bg-gradient-to-tr from-primary-600 via-primary-700 to-indigo-800 rounded-2xl flex items-center justify-center text-white text-xl shadow-md group-hover:scale-105 group-hover:shadow-primary-500/25 transition-all duration-300">
                 <HiAcademicCap className="w-6 h-6 text-white" />
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xl sm:text-2xl font-black tracking-tight text-gray-900 bg-gradient-to-r from-gray-900 via-gray-800 to-primary-900 bg-clip-text text-transparent">
-                    SmartReco
-                  </span>
-                  <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-bold bg-primary-50 text-primary-700 rounded-full border border-primary-200/80 shadow-2xs">
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary-600 animate-pulse" />
-                    AI Coach
-                  </span>
-                </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xl sm:text-2xl font-black tracking-tight text-gray-900 bg-gradient-to-r from-gray-900 via-gray-800 to-primary-900 bg-clip-text text-transparent">
+                  SmartReco
+                </span>
+                <span className="hidden xl:inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-bold bg-primary-50 text-primary-700 rounded-full border border-primary-200/80 shadow-2xs">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary-600 animate-pulse" />
+                  AI Coach
+                </span>
               </div>
             </Link>
 
             {/* Desktop Navigation Links */}
-            <nav className="hidden md:flex items-center gap-1.5">
+            <nav className="hidden lg:flex items-center gap-1 xl:gap-2 flex-shrink-0">
               {navLinks.map((link) => {
                 const Icon = link.icon
                 const active = isActive(link.path)
@@ -63,19 +62,14 @@ export const Navbar = () => {
                   <Link
                     key={link.path}
                     to={link.path}
-                    className={`relative flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 ${
+                    className={`relative flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all duration-200 ${
                       active
-                        ? 'bg-primary-50/90 text-primary-700 shadow-xs border border-primary-100'
+                        ? 'bg-primary-50/90 text-primary-700 shadow-2xs border border-primary-100/90'
                         : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100/70'
                     }`}
                   >
-                    <Icon className={`w-4 h-4 transition-colors ${active ? 'text-primary-600' : 'text-gray-400'}`} />
-                    <span>{link.label}</span>
-                    {link.badge && !active && (
-                      <span className="text-[10px] font-extrabold px-1.5 py-0.2 bg-indigo-100 text-indigo-700 rounded-md">
-                        {link.badge}
-                      </span>
-                    )}
+                    <Icon className={`w-4 h-4 flex-shrink-0 transition-colors ${active ? 'text-primary-600' : 'text-gray-400'}`} />
+                    <span className="whitespace-nowrap">{link.label}</span>
                   </Link>
                 )
               })}

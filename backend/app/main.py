@@ -46,6 +46,24 @@ async def lifespan(app: FastAPI):
 
     logger.info("Application startup complete")
 
+    # Pre-warm the embedding model + ChromaDB in a background thread so the
+    # first recommendation request doesn't block the event loop during model load.
+    import asyncio
+    loop = asyncio.get_running_loop()
+    def _warmup_model():
+        try:
+            from app.vector.embedding_service import get_embedding_service
+            from app.vector.chroma_client import get_chroma_client
+            svc = get_embedding_service()
+            _ = svc.model  # Trigger lazy load
+            logger.info("Embedding model pre-warmed successfully")
+            chroma = get_chroma_client()
+            _ = chroma.client  # Trigger socket probe & persistent client init
+            logger.info("ChromaDB client pre-warmed successfully")
+        except Exception as e:
+            logger.warning(f"Vector warmup failed (non-fatal): {e}")
+    loop.run_in_executor(None, _warmup_model)
+
     yield  # Application runs here
 
     # --- Shutdown ---

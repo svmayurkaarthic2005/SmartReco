@@ -15,29 +15,34 @@ export interface EventPayload {
   metadata?: Record<string, any>
 }
 
-const BUFFER_SIZE = 20
-const FLUSH_INTERVAL = 10000 // 10 seconds
+// Noisy events that don't need tracking (skip to reduce backend load)
+const SKIP_EVENT_TYPES = new Set(['scroll', 'time_on_page', 'dwell_time'])
+
+const BUFFER_SIZE = 15
+const FLUSH_INTERVAL = 15000 // 15 seconds
 
 export const useTracker = () => {
   const eventBuffer = useRef<any[]>([])
   const sessionId = useRef<string>(uuidv4())
   const flushTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  const flushBuffer = useCallback(async () => {
+  const flushBuffer = useCallback(() => {
     if (eventBuffer.current.length === 0) return
 
-    try {
-      const events = [...eventBuffer.current]
-      eventBuffer.current = []
+    const events = [...eventBuffer.current]
+    eventBuffer.current = []
 
-      await apiClient.post('/events/batch', { events })
-    } catch (error) {
-      console.error('Failed to send events:', error)
-      // Don't re-queue failed events to avoid infinite loop
-    }
+    // Fire-and-forget with a short 5-second timeout
+    apiClient.post('/events/batch', { events }, { timeout: 5000 })
+      .catch(() => {
+        // Silently ignore — noisy telemetry should never block the UI
+      })
   }, [])
 
   const trackEvent = useCallback((payload: EventPayload) => {
+    // Skip noisy events that don't affect recommendations
+    if (SKIP_EVENT_TYPES.has(payload.event_type)) return
+
     const event = {
       ...payload,
       session_id: sessionId.current,

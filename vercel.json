@@ -1,5 +1,10 @@
 {
   "version": 2,
+  "functions": {
+    "api/index.py": {
+      "runtime": "python3.11"
+    }
+  },
   "builds": [
     {
       "src": "frontend/package.json",
@@ -9,22 +14,50 @@
       }
     },
     {
-      "src": "backend/app/main.py",
+      "src": "api/index.py",
       "use": "@vercel/python"
     }
   ],
   "routes": [
     {
-      "src": "/api/v1/(.*)",
-      "dest": "backend/app/main.py"
+      "src": "/auth/(.*)",
+      "dest": "api/index.py"
+    },
+    {
+      "src": "/events/(.*)",
+      "dest": "api/index.py"
+    },
+    {
+      "src": "/personas/(.*)",
+      "dest": "api/index.py"
+    },
+    {
+      "src": "/recommendations/(.*)",
+      "dest": "api/index.py"
+    },
+    {
+      "src": "/admin/(.*)",
+      "dest": "api/index.py"
+    },
+    {
+      "src": "/products/(.*)",
+      "dest": "api/index.py"
+    },
+    {
+      "src": "/health",
+      "dest": "api/index.py"
     },
     {
       "src": "/docs",
-      "dest": "backend/app/main.py"
+      "dest": "api/index.py"
     },
     {
       "src": "/openapi.json",
-      "dest": "backend/app/main.py"
+      "dest": "api/index.py"
+    },
+    {
+      "src": "/redoc",
+      "dest": "api/index.py"
     },
     {
       "src": "/assets/(.*)",

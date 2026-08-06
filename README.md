@@ -2,6 +2,8 @@
 
 > **Built for the Krish Naik Academy SmartReco Build Challenge 2026**  
 > *Powered by **Mesh API** (Mandatory LLM Gateway) and **LangGraph Multi-Agent Architecture***
+>
+> 🌐 **Live Production Application**: [https://smart-reco-e6saj88lomivq-mayurs-projects-2c59cfae.vercel.app](https://smart-reco-e6saj88lomivq-mayurs-projects-2c59cfae.vercel.app)
 
 ---
 
@@ -128,10 +130,9 @@ LANGSMITH_API_KEY=your_langsmith_key
 LANGSMITH_PROJECT=smartreco-hackathon
 ```
 
-### 2. Start PostgreSQL & Redis Services
-```bash
-docker-compose up -d postgres redis
-```
+### 2. Database & Supabase Setup
+- **Local PostgreSQL**: Run `docker-compose up -d postgres redis`.
+- **Supabase Cloud**: Copy and run the complete SQL script from **[`docs/supabase_schema.sql`](docs/supabase_schema.sql)** directly in your Supabase SQL Editor. This initializes all tables (`users`, `products`, `courses`, `events`, `recommendations`, `recommendation_cache`), enums, and indexes.
 
 ### 3. Backend Setup & Database Seeding
 ```bash

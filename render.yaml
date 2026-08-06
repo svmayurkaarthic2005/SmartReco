@@ -1,0 +1,60 @@
+services:
+  # ----------------------------------------------------------------------------
+  # 1. Backend FastAPI Web Service
+  # ----------------------------------------------------------------------------
+  - type: web
+    name: smartreco-backend
+    env: python
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m app.database.seed && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: DATABASE_URL
+        fromDatabase:
+          name: smartreco-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: smartreco-redis
+          property: connectionString
+      - key: MESH_API_KEY
+        sync: false
+      - key: MESH_API_BASE_URL
+        value: https://api.meshapi.ai/v1
+      - key: MESH_MODEL
+        value: openai/gpt-4o
+      - key: SECRET_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: "*"
+
+  # ----------------------------------------------------------------------------
+  # 2. Frontend React + Vite Static Site
+  # ----------------------------------------------------------------------------
+  - type: web
+    name: smartreco-frontend
+    env: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        value: https://smartreco-backend.onrender.com/api/v1
+
+# ------------------------------------------------------------------------------
+# 3. PostgreSQL Managed Database
+# ------------------------------------------------------------------------------
+databases:
+  - name: smartreco-db
+    databaseName: smartreco
+    user: postgres
+    plan: free

@@ -42,8 +42,8 @@ const getYouTubeVideoInfo = (category: string, moduleIdx: number = 0, title: str
         channel: 'Traversy Media (Module 2: CSS Grid & Flexbox Masterclass)'
       },
       { 
-        embed: 'https://www.youtube.com/embed/p1QU3kLFPdg', 
-        watch: 'https://www.youtube.com/watch?v=p1QU3kLFPdg',
+        embed: 'https://www.youtube.com/embed/dFgzHOX84xQ', 
+        watch: 'https://www.youtube.com/watch?v=dFgzHOX84xQ',
         channel: 'freeCodeCamp (Module 3: Advanced CSS Animations & Dark Mode)'
       },
       { 
@@ -54,23 +54,23 @@ const getYouTubeVideoInfo = (category: string, moduleIdx: number = 0, title: str
     ],
     ios_swift: [
       { 
-        embed: 'https://www.youtube.com/embed/Com3pu5HPAU', 
-        watch: 'https://www.youtube.com/watch?v=Com3pu5HPAU',
+        embed: 'https://www.youtube.com/embed/Ulp1Kimblg0', 
+        watch: 'https://www.youtube.com/watch?v=Ulp1Kimblg0',
         channel: 'freeCodeCamp (Module 1: Swift Basics & Language Syntax)'
       },
       { 
-        embed: 'https://www.youtube.com/embed/b1oD88v5z7Y', 
-        watch: 'https://www.youtube.com/watch?v=b1oD88v5z7Y',
+        embed: 'https://www.youtube.com/embed/F2ojC6TNwws', 
+        watch: 'https://www.youtube.com/watch?v=F2ojC6TNwws',
         channel: 'Sean Allen (Module 2: SwiftUI Interface Design)'
       },
       { 
-        embed: 'https://www.youtube.com/embed/n42sW3Z9d1g', 
-        watch: 'https://www.youtube.com/watch?v=n42sW3Z9d1g',
+        embed: 'https://www.youtube.com/embed/Ulp1Kimblg0', 
+        watch: 'https://www.youtube.com/watch?v=Ulp1Kimblg0',
         channel: 'freeCodeCamp (Module 3: CoreData & Local Persistence)'
       },
       { 
-        embed: 'https://www.youtube.com/embed/3vLbg-d576Y', 
-        watch: 'https://www.youtube.com/watch?v=3vLbg-d576Y',
+        embed: 'https://www.youtube.com/embed/F2ojC6TNwws', 
+        watch: 'https://www.youtube.com/watch?v=F2ojC6TNwws',
         channel: 'freeCodeCamp (Module 4: App Store Signing & Release)'
       }
     ],
@@ -98,19 +98,19 @@ const getYouTubeVideoInfo = (category: string, moduleIdx: number = 0, title: str
     ],
     react_native: [
       { 
-        embed: 'https://www.youtube.com/embed/gvkqT_UoM5o', 
-        watch: 'https://www.youtube.com/watch?v=gvkqT_UoM5o',
+        embed: 'https://www.youtube.com/embed/0-S5a0eXPoc', 
+        watch: 'https://www.youtube.com/watch?v=0-S5a0eXPoc',
         channel: 'freeCodeCamp (Module 1: React Native & Expo Fundamentals)'
       },
       { 
-        embed: 'https://www.youtube.com/embed/ANdSdIlgsEw', 
-        watch: 'https://www.youtube.com/watch?v=ANdSdIlgsEw',
-        channel: 'Programming with Mosh (Module 2: Native Component Styling)'
+        embed: 'https://www.youtube.com/embed/obH0Po_RdWk', 
+        watch: 'https://www.youtube.com/watch?v=obH0Po_RdWk',
+        channel: 'freeCodeCamp (Module 2: Native Component Styling & Expo Router)'
       },
       { 
-        embed: 'https://www.youtube.com/embed/VosnrdLWeUr', 
-        watch: 'https://www.youtube.com/watch?v=VosnrdLWeUr',
-        channel: 'freeCodeCamp (Module 3: React Navigation & Context API)'
+        embed: 'https://www.youtube.com/embed/mJ3bGvy0WAY', 
+        watch: 'https://www.youtube.com/watch?v=mJ3bGvy0WAY',
+        channel: 'JavaScript Mastery (Module 3: React Navigation & Context API)'
       },
       { 
         embed: 'https://www.youtube.com/embed/0-S5a0eXPoc', 
@@ -125,18 +125,18 @@ const getYouTubeVideoInfo = (category: string, moduleIdx: number = 0, title: str
         channel: 'freeCodeCamp (Module 1: Kotlin Syntax & Null Safety)'
       },
       { 
-        embed: 'https://www.youtube.com/embed/smdaN6-tMRA', 
-        watch: 'https://www.youtube.com/watch?v=smdaN6-tMRA',
+        embed: 'https://www.youtube.com/embed/fis26HvvDII', 
+        watch: 'https://www.youtube.com/watch?v=fis26HvvDII',
         channel: 'freeCodeCamp (Module 2: Jetpack Compose Declarative UI)'
       },
       { 
-        embed: 'https://www.youtube.com/embed/EOFN33x6mO8', 
-        watch: 'https://www.youtube.com/watch?v=EOFN33x6mO8',
+        embed: 'https://www.youtube.com/embed/F9UC9DY-vIU', 
+        watch: 'https://www.youtube.com/watch?v=F9UC9DY-vIU',
         channel: 'Philipp Lackner (Module 3: Room Database & Offline Storage)'
       },
       { 
-        embed: 'https://www.youtube.com/embed/4gUeynkB280', 
-        watch: 'https://www.youtube.com/watch?v=4gUeynkB280',
+        embed: 'https://www.youtube.com/embed/fis26HvvDII', 
+        watch: 'https://www.youtube.com/watch?v=fis26HvvDII',
         channel: 'freeCodeCamp (Module 4: Retrofit REST API & MVVM Clean Architecture)'
       }
     ],
@@ -147,18 +147,18 @@ const getYouTubeVideoInfo = (category: string, moduleIdx: number = 0, title: str
         channel: 'freeCodeCamp (Module 1: System Design Fundamentals & CAP Theorem)'
       },
       { 
-        embed: 'https://www.youtube.com/embed/iE_n1Jg7iuc', 
-        watch: 'https://www.youtube.com/watch?v=iE_n1Jg7iuc',
+        embed: 'https://www.youtube.com/embed/UzLMhqg3_Wc', 
+        watch: 'https://www.youtube.com/watch?v=UzLMhqg3_Wc',
         channel: 'ByteByteGo (Module 2: Microservices Architecture & API Gateways)'
       },
       { 
-        embed: 'https://www.youtube.com/embed/UzLMhqg3_Wc', 
-        watch: 'https://www.youtube.com/watch?v=UzLMhqg3_Wc',
+        embed: 'https://www.youtube.com/embed/SqcXvc3ZmRU', 
+        watch: 'https://www.youtube.com/watch?v=SqcXvc3ZmRU',
         channel: 'freeCodeCamp (Module 3: Database Sharding & Load Balancing)'
       },
       { 
-        embed: 'https://www.youtube.com/embed/R87354KGP3c', 
-        watch: 'https://www.youtube.com/watch?v=R87354KGP3c',
+        embed: 'https://www.youtube.com/embed/m8Icp_Cid5o', 
+        watch: 'https://www.youtube.com/watch?v=m8Icp_Cid5o',
         channel: 'freeCodeCamp (Module 4: Distributed Caching & Kafka Streams)'
       }
     ],
@@ -169,13 +169,13 @@ const getYouTubeVideoInfo = (category: string, moduleIdx: number = 0, title: str
         channel: 'freeCodeCamp (Module 1: Data Pipeline Architecture)'
       },
       { 
-        embed: 'https://www.youtube.com/embed/c9jh1B6K-40', 
-        watch: 'https://www.youtube.com/watch?v=c9jh1B6K-40',
+        embed: 'https://www.youtube.com/embed/K9AnJ9_ZAXE', 
+        watch: 'https://www.youtube.com/watch?v=K9AnJ9_ZAXE',
         channel: 'freeCodeCamp (Module 2: PySpark Big Data Processing)'
       },
       { 
-        embed: 'https://www.youtube.com/embed/R87354KGP3c', 
-        watch: 'https://www.youtube.com/watch?v=R87354KGP3c',
+        embed: 'https://www.youtube.com/embed/qWru-b6m030', 
+        watch: 'https://www.youtube.com/watch?v=qWru-b6m030',
         channel: 'freeCodeCamp (Module 3: Apache Kafka Event Streaming)'
       },
       { 
@@ -218,20 +218,20 @@ const getYouTubeVideoInfo = (category: string, moduleIdx: number = 0, title: str
         channel: 'freeCodeCamp (Module 2: 2D/3D Physics & Character Mechanics)'
       },
       { 
-        embed: 'https://www.youtube.com/embed/k--vFuT85D4', 
-        watch: 'https://www.youtube.com/watch?v=k--vFuT85D4',
+        embed: 'https://www.youtube.com/embed/gB1F9G0JXOo', 
+        watch: 'https://www.youtube.com/watch?v=gB1F9G0JXOo',
         channel: 'freeCodeCamp (Module 3: Unreal Engine 5 Environment & Lighting)'
       },
       { 
-        embed: 'https://www.youtube.com/embed/443E-66fzAg', 
-        watch: 'https://www.youtube.com/watch?v=443E-66fzAg',
+        embed: 'https://www.youtube.com/embed/XtQMytORBmM', 
+        watch: 'https://www.youtube.com/watch?v=XtQMytORBmM',
         channel: 'freeCodeCamp (Module 4: Multiplayer Networking & Optimization)'
       }
     ],
     design: [
       { 
-        embed: 'https://www.youtube.com/embed/3W1_1T2a5f4', 
-        watch: 'https://www.youtube.com/watch?v=3W1_1T2a5f4',
+        embed: 'https://www.youtube.com/embed/FTFaQWZBqQ8', 
+        watch: 'https://www.youtube.com/watch?v=FTFaQWZBqQ8',
         channel: 'freeCodeCamp (Module 1: UX Research, Wireframing & Journeys)'
       },
       { 
@@ -245,8 +245,8 @@ const getYouTubeVideoInfo = (category: string, moduleIdx: number = 0, title: str
         channel: 'freeCodeCamp (Module 3: Interactive Prototyping & Motion)'
       },
       { 
-        embed: 'https://www.youtube.com/embed/68O6eOG8qW8', 
-        watch: 'https://www.youtube.com/watch?v=68O6eOG8qW8',
+        embed: 'https://www.youtube.com/embed/c9Wg6Cb_YlU', 
+        watch: 'https://www.youtube.com/watch?v=c9Wg6Cb_YlU',
         channel: 'freeCodeCamp (Module 4: Design Systems & Hand-off)'
       }
     ],
@@ -262,13 +262,13 @@ const getYouTubeVideoInfo = (category: string, moduleIdx: number = 0, title: str
         channel: 'freeCodeCamp (Module 2: Ethical Hacking & Metasploit)'
       },
       { 
-        embed: 'https://www.youtube.com/embed/2b5h-U7Jj1A', 
-        watch: 'https://www.youtube.com/watch?v=2b5h-U7Jj1A',
+        embed: 'https://www.youtube.com/embed/lZAoFs75_cs', 
+        watch: 'https://www.youtube.com/watch?v=lZAoFs75_cs',
         channel: 'freeCodeCamp (Module 3: Ghidra Reverse Engineering)'
       },
       { 
-        embed: 'https://www.youtube.com/embed/WnNCNb2vA-w', 
-        watch: 'https://www.youtube.com/watch?v=WnNCNb2vA-w',
+        embed: 'https://www.youtube.com/embed/3Kq1MIfTWCE', 
+        watch: 'https://www.youtube.com/watch?v=3Kq1MIfTWCE',
         channel: 'freeCodeCamp (Module 4: OWASP Web Security & Audit)'
       }
     ],
@@ -289,9 +289,9 @@ const getYouTubeVideoInfo = (category: string, moduleIdx: number = 0, title: str
         channel: 'Andrej Karpathy (Module 3: Transformers & LLMs from Scratch)'
       },
       { 
-        embed: 'https://www.youtube.com/embed/5sLYAQS9s8U', 
-        watch: 'https://www.youtube.com/watch?v=5sLYAQS9s8U',
-        channel: 'LangGraph (Module 4: Autonomous Multi-Agent Systems)'
+        embed: 'https://www.youtube.com/embed/zjkBMFhNj_g', 
+        watch: 'https://www.youtube.com/watch?v=zjkBMFhNj_g',
+        channel: 'Andrej Karpathy (Module 4: Intro to Large Language Models)'
       }
     ],
     web: [
@@ -306,20 +306,20 @@ const getYouTubeVideoInfo = (category: string, moduleIdx: number = 0, title: str
         channel: 'freeCodeCamp (Module 2: React 18 & Component Hooks)'
       },
       { 
-        embed: 'https://www.youtube.com/embed/wm5gMKCOB4U', 
-        watch: 'https://www.youtube.com/watch?v=wm5gMKCOB4U',
+        embed: 'https://www.youtube.com/embed/Oe421EPjeBE', 
+        watch: 'https://www.youtube.com/watch?v=Oe421EPjeBE',
         channel: 'freeCodeCamp (Module 3: Next.js 14 App Router & Server Actions)'
       },
       { 
-        embed: 'https://www.youtube.com/embed/Oe421EPjeBE', 
-        watch: 'https://www.youtube.com/watch?v=Oe421EPjeBE',
+        embed: 'https://www.youtube.com/embed/zJSY8tbf_ys', 
+        watch: 'https://www.youtube.com/watch?v=zJSY8tbf_ys',
         channel: 'freeCodeCamp (Module 4: Node.js Backend Microservices)'
       }
     ],
     blockchain: [
       { 
-        embed: 'https://www.youtube.com/embed/gyMwXuJrbVQ', 
-        watch: 'https://www.youtube.com/watch?v=gyMwXuJrbVQ',
+        embed: 'https://www.youtube.com/embed/M576WGiDBdQ', 
+        watch: 'https://www.youtube.com/watch?v=M576WGiDBdQ',
         channel: 'freeCodeCamp (Module 1: Cryptography & Smart Contracts)'
       },
       { 
@@ -328,13 +328,13 @@ const getYouTubeVideoInfo = (category: string, moduleIdx: number = 0, title: str
         channel: 'freeCodeCamp (Module 2: Solidity & Ethereum Web3)'
       },
       { 
-        embed: 'https://www.youtube.com/embed/amqb-8xstLw', 
-        watch: 'https://www.youtube.com/watch?v=amqb-8xstLw',
-        channel: 'DeFi Security (Module 3: DeFi Protocol Architecture)'
+        embed: 'https://www.youtube.com/embed/M576WGiDBdQ', 
+        watch: 'https://www.youtube.com/watch?v=M576WGiDBdQ',
+        channel: 'freeCodeCamp (Module 3: DeFi Protocol Architecture)'
       },
       { 
-        embed: 'https://www.youtube.com/embed/P4UAG36R7xY', 
-        watch: 'https://www.youtube.com/watch?v=P4UAG36R7xY',
+        embed: 'https://www.youtube.com/embed/M576WGiDBdQ', 
+        watch: 'https://www.youtube.com/watch?v=M576WGiDBdQ',
         channel: 'freeCodeCamp (Module 4: Rust & Solana Smart Contracts)'
       }
     ],
@@ -864,9 +864,9 @@ export const CourseDetailPage = () => {
         // Find the MOST RECENT enroll or unenroll event for this course
         const enrollmentEvents = myEvents.filter(evt => {
           const isThisCourse =
-            evt.product_id === found.id ||
-            (evt as any).metadata?.course_title === found.title ||
-            (evt as any).event_metadata?.course_title === found.title
+            (evt.product_id && String(evt.product_id).toLowerCase() === String(found.id).toLowerCase()) ||
+            ((evt as any).metadata?.course_title && (evt as any).metadata.course_title.toLowerCase() === found.title.toLowerCase()) ||
+            ((evt as any).event_metadata?.course_title && (evt as any).event_metadata.course_title.toLowerCase() === found.title.toLowerCase())
 
           const evtType = String(evt.event_type).toLowerCase()
           const isEnrollOrUnenroll =
@@ -987,7 +987,6 @@ export const CourseDetailPage = () => {
 
   const handleUnenroll = async () => {
     if (!user || !course) return
-    if (!confirm(`Unenroll from "${course.title}"? Your progress will be saved.`)) return
     setEnrolling(true)
 
     const meta = {
@@ -1188,7 +1187,8 @@ export const CourseDetailPage = () => {
                           className="absolute top-0 left-0 w-full h-full border-0"
                           src={videoInfo.embed}
                           title={`${modulesData[activeModule].title} Video`}
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                          referrerPolicy="strict-origin-when-cross-origin"
                           allowFullScreen
                         />
                       </div>

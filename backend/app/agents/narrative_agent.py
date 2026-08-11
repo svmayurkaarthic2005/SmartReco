@@ -187,13 +187,20 @@ Output Format:
         """
         Build user prompt with context and constraints.
         """
-        # Get top categories, prioritizing the top-ranked recommendation category
-        primary_category = ranked_products[0].category if ranked_products else "various topics"
+        # Get top categories for context
+        # Prefer the top-ranked recommended product's category (already enrollment-excluded)
+        # rather than categories_explored which may be dominated by enrolled course categories
+        primary_category = None
+        if ranked_products:
+            primary_category = ranked_products[0].category
+        if not primary_category and summary.categories_explored:
+            # Fall back to most-explored category
+            primary_category = max(summary.categories_explored.items(), key=lambda x: x[1])[0]
+        if not primary_category:
+            primary_category = "various topics"
+
         if summary.categories_explored:
             sorted_cats = [cat for cat, _ in sorted(summary.categories_explored.items(), key=lambda x: x[1], reverse=True)]
-            if primary_category in sorted_cats:
-                sorted_cats.remove(primary_category)
-            sorted_cats.insert(0, primary_category)
             categories_str = ", ".join(sorted_cats[:3])
         else:
             categories_str = primary_category
@@ -216,7 +223,10 @@ Output Format:
         # Build enrollment context to inform the LLM about unenroll/re-enroll/completion signals
         enrollment_ctx_parts = []
         if summary.enrolled_product_titles:
-            enrollment_ctx_parts.append(f"Currently enrolled in: {', '.join(summary.enrolled_product_titles[:3])}")
+            enrollment_ctx_parts.append(f"Currently enrolled in: {', '.join(summary.enrolled_product_titles[:3])} — do NOT recommend these again")
+        unenrolled_titles = getattr(summary, 'unenrolled_product_titles', [])
+        if unenrolled_titles:
+            enrollment_ctx_parts.append(f"Dropped/unenrolled: {', '.join(unenrolled_titles[:3])} — do NOT recommend these")
         if getattr(summary, 're_enrollment_events', 0) > 0:
             re_cats = getattr(summary, 're_enrolled_categories', [])
             re_cats_str = (', '.join(re_cats[:3])) if re_cats else 'unknown'
@@ -307,22 +317,75 @@ Remember: Use ONLY course titles and IDs from the list above."""
     ) -> NarrativeResult:
         """
         Create safe fallback narrative if AI generation fails.
+        
+        For cold-start users (no categories explored), creates a diverse exploration narrative.
+        For users with history, focuses on their dominant interest.
         """
-        # Top category matches the #1 ranked recommendation product category
-        top_category = ranked_products[0].category if ranked_products else "your interests"
-        if not top_category or top_category.lower() == 'general':
-            if summary.last_viewed_category:
-                top_category = summary.last_viewed_category
-            elif summary.categories_explored:
-                top_category = max(summary.categories_explored.items(), key=lambda x: x[1])[0]
+        # Check if this is a cold-start scenario (no meaningful category exploration)
+        has_category_history = bool(summary.categories_explored and sum(summary.categories_explored.values()) > 0)
+        
+        if not has_category_history and ranked_products:
+            # Cold-start: diverse recommendations across categories
+            unique_categories = list(set(p.category for p in ranked_products[:5]))
+            
+            if len(unique_categories) >= 3:
+                # Multiple diverse categories
+                learning_goal = f"Explore diverse professional development paths"
+                story = (
+                    f"We've curated a diverse learning journey across {len(unique_categories)} domains including "
+                    f"{', '.join(unique_categories[:3])}. "
+                    f"Start with any course that sparks your interest to discover your path forward."
+                )
+            else:
+                # 1-2 categories
+                learning_goal = f"Begin your learning journey in {' and '.join(unique_categories)}"
+                story = (
+                    f"Explore foundational courses in {' and '.join(unique_categories)} to build your skills. "
+                    f"These courses are designed to help you discover your interests and career direction."
+                )
+        else:
+            # User has category history - check for multi-interest scenario
+            enrolled_categories = getattr(summary, 'enrolled_categories', [])
+            
+            if len(enrolled_categories) >= 2:
+                # Multi-interest user: enrolled in 2+ categories
+                if len(enrolled_categories) == 2:
+                    learning_goal = f"Advance your skills in {' and '.join(enrolled_categories)}"
+                elif len(enrolled_categories) == 3:
+                    learning_goal = f"Advance your skills in {', '.join(enrolled_categories[:-1])}, and {enrolled_categories[-1]}"
+                else:  # 4+ categories
+                    learning_goal = f"Master {len(enrolled_categories)} domains: {', '.join(enrolled_categories[:3])}, and more"
+                
+                # List all enrolled categories in the story
+                category_list = ', '.join(enrolled_categories) if len(enrolled_categories) <= 3 else f"{', '.join(enrolled_categories[:3])}, and {len(enrolled_categories) - 3} more"
+                story = (
+                    f"You're building expertise across {len(enrolled_categories)} domains: {category_list}. "
+                    f"These recommendations will help you deepen your knowledge in each area. "
+                    f"Continue your cross-functional learning journey!"
+                )
+            else:
+                # Single-interest user
+                top_category = None
+                if summary.categories_explored:
+                    top_category = max(summary.categories_explored.items(), key=lambda x: x[1])[0]
+                if not top_category and ranked_products:
+                    top_category = ranked_products[0].category
+                if not top_category or top_category.lower() in ('general', '0'):
+                    top_category = summary.last_viewed_category or "your interests"
+                
+                learning_goal = f"Master {top_category} with structured learning"
+                story = (
+                    f"Based on your exploration of {top_category}, we've curated courses that match your learning style and pace. "
+                    f"Continue building your expertise with these carefully selected recommendations."
+                )
         
         return NarrativeResult(
             persona_display=self._format_persona_display(persona),
-            learning_goal=f"Master {top_category} with structured learning",
-            personalized_story=f"Based on your exploration of {top_category}, we've curated courses that match your learning style and pace. Continue building your expertise with these carefully selected recommendations.",
+            learning_goal=learning_goal,
+            personalized_story=story,
             roadmap=[p.title for p in ranked_products[:3]],
             product_explanations={
-                p.product_id: f"Recommended next step for your enrolled & completed track in {p.category}"
+                p.product_id: f"Recommended {p.difficulty} course in {p.category} aligned with your learning goals"
                 for p in ranked_products[:5]
             },
             motivational_cta="Start your learning journey today!"
@@ -340,4 +403,4 @@ Remember: Use ONLY course titles and IDs from the list above."""
     async def close(self):
         """Close Redis connection"""
         if self.redis_client:
-            await self.redis_client.close()
+            await self.redis_client.aclose()

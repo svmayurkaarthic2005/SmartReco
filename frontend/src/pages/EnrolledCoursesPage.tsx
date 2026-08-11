@@ -39,7 +39,7 @@ export const EnrolledCoursesPage = () => {
         getProducts().catch(() => [])
       ])
 
-      const productsMap = new Map((productsData || []).map(p => [p.id, p]))
+      const productsMap = new Map((productsData || []).map(p => [p.id.toLowerCase(), p]))
       const productsByTitle = new Map((productsData || []).map(p => [p.title.toLowerCase(), p]))
 
       const activeSet = new Map<string, Product>()
@@ -53,7 +53,7 @@ export const EnrolledCoursesPage = () => {
           const evtType = String(evt.event_type || '').toLowerCase()
           
           // Match product by ID or lowercased title
-          let prod = evt.product_id ? productsMap.get(evt.product_id) : null
+          let prod = evt.product_id ? productsMap.get(String(evt.product_id).toLowerCase()) : null
           if (!prod && titleFromMeta) {
             prod = productsByTitle.get(String(titleFromMeta).toLowerCase())
           }
@@ -83,8 +83,6 @@ export const EnrolledCoursesPage = () => {
   }, [fetchEnrolledCourses])
 
   const handleUnenroll = async (product: Product) => {
-    if (!confirm(`Are you sure you want to unenroll from "${product.title}"?`)) return
-
     setProcessingId(product.id)
     try {
       const meta = {

@@ -204,24 +204,27 @@ class PersonaAgent:
     def _score_career_switcher(self, summary: BehaviorSummary) -> int:
         """Score for CAREER_SWITCHER persona (max: 4)"""
         score = 0
-        
-        # Multiple categories explored (+1)
+
+        # Multiple categories explored (+1) — signals exploring new fields
         if len(summary.categories_explored) > 1:
             score += 1
-        
-        # TODO: Beginner difficulty dominates (+2)
-        # Requires product difficulty data from viewed products
-        # Placeholder: check if user viewed many products (proxy for exploration)
-        if len(summary.unique_products_viewed) > 5:
+
+        # Beginner difficulty dominates their viewed content (+2)
+        # Uses the real dominant_difficulty computed from product metadata
+        dominant_diff = getattr(summary, 'dominant_difficulty', None)
+        if dominant_diff and dominant_diff.lower() == 'beginner':
             score += 2
-        
+        elif len(summary.unique_products_viewed) > 5 and not dominant_diff:
+            # Fallback: many views with no difficulty data (sparse catalog)
+            score += 1
+
         # Search queries contain beginner keywords (+1)
         beginner_keywords = ['beginner', 'learn', 'start', 'intro', 'basics', 'fundamentals']
         for query in summary.search_queries:
             if any(keyword in query.lower() for keyword in beginner_keywords):
                 score += 1
                 break
-        
+
         return score
     
     def _score_price_sensitive(self, summary: BehaviorSummary) -> int:
@@ -244,21 +247,24 @@ class PersonaAgent:
     def _score_overwhelmed_learner(self, summary: BehaviorSummary) -> int:
         """Score for OVERWHELMED_LEARNER persona (max: 4)"""
         score = 0
-        
-        # TODO: Advanced products viewed (+2)
-        # Requires product difficulty data
-        # Placeholder: check if user viewed products but didn't engage deeply
-        if len(summary.unique_products_viewed) > 3 and summary.avg_dwell_time < 90:
+
+        # Advanced content dominates their viewed products (+2)
+        # An overwhelmed learner is someone who views hard content but doesn't engage
+        dominant_diff = getattr(summary, 'dominant_difficulty', None)
+        if dominant_diff and dominant_diff.lower() == 'advanced':
             score += 2
-        
-        # No enrollment events (+1)
+        elif len(summary.unique_products_viewed) > 3 and summary.avg_dwell_time < 90 and not dominant_diff:
+            # Fallback: many quick views with no difficulty data
+            score += 2
+
+        # No enrollment events (+1) — viewed content but didn't commit
         if summary.enrollment_events == 0:
             score += 1
-        
-        # Low scroll depth (+1)
+
+        # Low scroll depth (+1) — not reading content deeply
         if summary.scroll_depth_avg > 0 and summary.scroll_depth_avg < 40:
             score += 1
-        
+
         return score
     
     def _score_drop_off_risk(self, summary: BehaviorSummary) -> int:

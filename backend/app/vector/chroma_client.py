@@ -32,13 +32,30 @@ class ChromaClient:
 
             if is_http_available:
                 try:
+                    import threading
                     print(f"Connecting to ChromaDB HTTP server at {settings.chroma_host}:{settings.chroma_port}")
                     http_client = chromadb.HttpClient(
                         host=settings.chroma_host,
                         port=settings.chroma_port,
                         settings=ChromaSettings(anonymized_telemetry=False)
                     )
-                    http_client.heartbeat()
+                    # Run heartbeat in a background thread so it doesn't block
+                    # event loop when this property is first accessed
+                    result = []
+                    error = []
+                    def _hb():
+                        try:
+                            http_client.heartbeat()
+                            result.append(True)
+                        except Exception as e:
+                            error.append(e)
+                    t = threading.Thread(target=_hb, daemon=True)
+                    t.start()
+                    t.join(timeout=1.0)  # Wait max 1s
+                    if error:
+                        raise error[0]
+                    if not result:
+                        raise TimeoutError("ChromaDB heartbeat timed out")
                     self._client = http_client
                     print("✓ ChromaDB HTTP connection successful")
                 except Exception as e:

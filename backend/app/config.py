@@ -27,8 +27,8 @@ class Settings(BaseSettings):
     # Database Configuration
     # =============================================================================
     database_url: str = Field(
-        ..., 
-        description="PostgreSQL connection string"
+        default="sqlite+aiosqlite:///./smartreco.db", 
+        description="Database connection string"
     )
     db_pool_size: int = Field(default=10, description="Database connection pool size")
     db_max_overflow: int = Field(default=20, description="Max overflow connections")
@@ -107,7 +107,10 @@ class Settings(BaseSettings):
     # =============================================================================
     # Authentication & Security
     # =============================================================================
-    secret_key: str = Field(..., description="Secret key for JWT tokens")
+    secret_key: str = Field(
+        default="dev-secret-key-smartreco-2026-super-secure-token-secret",
+        description="Secret key for JWT tokens"
+    )
     algorithm: str = Field(default="HS256", description="JWT algorithm")
     access_token_expire_minutes: int = Field(
         default=30,

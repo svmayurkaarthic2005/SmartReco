@@ -43,12 +43,13 @@ class RankingAgent:
     """
     
     # Scoring weights (must sum to 1.0)
-    WEIGHT_SEMANTIC = 0.35
-    WEIGHT_DIFFICULTY_MATCH = 0.20
+    WEIGHT_SEMANTIC = 0.30
+    WEIGHT_DIFFICULTY_MATCH = 0.15
     WEIGHT_LEARNING_PROGRESSION = 0.15
     WEIGHT_PRICE_FIT = 0.10
     WEIGHT_TAG_OVERLAP = 0.10
     WEIGHT_FRESHNESS = 0.10
+    WEIGHT_DURATION_FIT = 0.10  # Was previously unlabelled — now declared (total = 1.0)
     
     def rank(
         self,
@@ -94,6 +95,12 @@ class RankingAgent:
             if not candidates:
                 return []
             
+            print(f"[RANK-DEBUG] Ranking {len(candidates)} candidates")
+            print(f"[RANK-DEBUG] enrolled_ids: {summary.enrolled_product_ids}")
+            print(f"[RANK-DEBUG] enrolled_titles: {summary.enrolled_product_titles}")
+            print(f"[RANK-DEBUG] unenrolled_ids: {summary.unenrolled_product_ids}")
+            print(f"[RANK-DEBUG] unenrolled_titles: {summary.unenrolled_product_titles}")
+            
             # Compute all scores for each candidate
             ranked_products = []
             
@@ -110,25 +117,30 @@ class RankingAgent:
                     candidates  # Pass all candidates for normalization
                 )
                 
-                # 1. Enrolled Track Boost: Boost courses in user's active enrolled categories
+                # 1. Enrolled Track Boost: Boost courses in user's ACTIVE enrolled categories
                 enrollment_boost = 0.0
                 enrolled_titles = [t.lower() for t in getattr(summary, 'enrolled_product_titles', [])]
                 enrolled_ids = getattr(summary, 'enrolled_product_ids', [])
-                
-                # Deduce enrolled categories from db_products or candidate
-                enrolled_cats = set()
-                for eid in enrolled_ids:
-                    ep = db_products.get(eid)
-                    if ep and ep.category:
-                        enrolled_cats.add(ep.category.lower())
-                
-                if candidate.category and candidate.category.lower() in enrolled_cats:
-                    enrollment_boost = 0.35
-                
-                # If user is ALREADY enrolled in this exact product, penalty so NEXT STEPS rank higher
-                already_enrolled_penalty = -0.30 if candidate.product_id in enrolled_ids else 0.0
 
-                # 2. Unenrollment Penalty: if user explicitly dropped this course (by UUID or title) or category, penalize so fresh alternatives are recommended
+                # Use the explicitly-tracked enrolled_categories field (accurate after ENROLL/UNENROLL events)
+                enrolled_cats = set(c.lower() for c in getattr(summary, 'enrolled_categories', []))
+
+                # Also add top explored categories from summary (weight > 50) as secondary signal
+                if summary and summary.categories_explored:
+                    top_cats = [c.lower() for c, w in summary.categories_explored.items() if w > 50]
+                    enrolled_cats.update(top_cats)
+
+                if candidate.category and candidate.category.lower() in enrolled_cats:
+                    enrollment_boost = 0.40
+
+                # Check if user is currently enrolled in this exact course
+                is_already_enrolled = (
+                    candidate.product_id in enrolled_ids
+                    or str(candidate.product_id).lower() in [str(e).lower() for e in enrolled_ids]
+                    or candidate.title.lower() in enrolled_titles
+                )
+
+                # 2. Unenrollment Penalty: if user explicitly dropped this course, hard-clamp
                 unenrolled_ids_lower = [str(pid).lower() for pid in getattr(summary, 'unenrolled_product_ids', [])]
                 unenrolled_titles_lower = [t.lower() for t in getattr(summary, 'unenrolled_product_titles', [])]
                 unenrolled_cats = [c.lower() for c in getattr(summary, 'unenrolled_categories', [])]
@@ -137,9 +149,12 @@ class RankingAgent:
                     str(candidate.product_id).lower() in unenrolled_ids_lower
                     or candidate.title.lower() in unenrolled_titles_lower
                 )
-                
+
                 unenrolled_course_penalty = -1.0 if is_unenrolled_course else 0.0
                 unenrolled_cat_penalty = -0.35 if (candidate.category and candidate.category.lower() in unenrolled_cats and candidate.category.lower() not in enrolled_cats) else 0.0
+
+                # No penalty needed — already_enrolled courses will be hard-clamped below
+                already_enrolled_penalty = 0.0
 
                 # 3. Completion Boost: if user completed lessons/modules in this category
                 completion_boost = 0.0
@@ -179,7 +194,7 @@ class RankingAgent:
                     scores['price_fit'] * self.WEIGHT_PRICE_FIT +
                     scores['tag_overlap'] * self.WEIGHT_TAG_OVERLAP +
                     scores['freshness'] * self.WEIGHT_FRESHNESS +
-                    scores['duration_fit'] * 0.10 +
+                    scores['duration_fit'] * self.WEIGHT_DURATION_FIT +
                     enrollment_boost +
                     completion_boost +
                     cat_boost +
@@ -189,8 +204,9 @@ class RankingAgent:
                     unenrolled_cat_penalty
                 )
 
-                # Hard clamp final_score = 0.0 for dropped courses
-                if is_unenrolled_course:
+                # Hard clamp final_score = 0.0 for dropped OR already-enrolled courses
+                # Already enrolled courses should not appear in recommendations (next steps only)
+                if is_unenrolled_course or is_already_enrolled:
                     final_score = 0.0
                 else:
                     final_score = min(1.0, max(0.05, raw_score))
@@ -211,7 +227,10 @@ class RankingAgent:
                 ranked_products.append(ranked_product)
             
             # Exclude zero-score (dropped) courses if non-zero candidates exist
+            zero_scored = [p for p in ranked_products if p.final_score == 0.0]
             valid_ranked = [p for p in ranked_products if p.final_score > 0.0]
+            if zero_scored:
+                print(f"[RANK-DEBUG] EXCLUDED {len(zero_scored)} courses (score=0): {[p.title for p in zero_scored]}")
             if valid_ranked:
                 ranked_products = valid_ranked
 
@@ -224,6 +243,7 @@ class RankingAgent:
             
             # Get top 8
             top_8 = ranked_products[:8]
+            print(f"[RANK-DEBUG] Final top {len(top_8)}: {[(p.title, f'{p.final_score:.2f}') for p in top_8]}")
             
             return top_8
     
@@ -486,14 +506,29 @@ class RankingAgent:
     def _score_duration_fit(self, candidate: CandidateProduct, summary: BehaviorSummary) -> float:
         """
         Score candidate based on user's preferred course duration depth.
+
+        Uses avg_duration_preference from BehaviorSummary (hours the user
+        typically spends on courses they engage with deeply).
+        If no preference data, returns neutral 0.5.
         """
         pref_duration = getattr(summary, 'avg_duration_preference', 0.0)
-        # CandidateProduct doesn't carry duration_hours; use neutral score if no preference
         if pref_duration <= 0:
-            return 0.80  # Neutral score
+            return 0.5  # No preference data — neutral score
 
-        # candidate.price is a proxy — if candidate doesn't have duration we return neutral
-        return 0.80
+        # CandidateProduct doesn't carry duration_hours in its schema.
+        # Proxy: price is loosely correlated with course length (longer courses cost more).
+        # Use price as a rough proxy: $0-30 → short, $30-80 → medium, $80+ → long
+        price = candidate.price or 0.0
+        estimated_hours = 5.0 + (price / 10.0)  # e.g. $50 course ≈ 10h
+
+        if estimated_hours <= 0:
+            return 0.5
+
+        ratio = pref_duration / estimated_hours
+        # Ideal ratio ≈ 1.0 (preference matches course length)
+        # Penalise proportionally for deviation
+        score = max(0.0, 1.0 - abs(1.0 - ratio) * 0.5)
+        return max(0.0, min(1.0, score))
     
     def _is_adjacent_difficulty(self, difficulty1: str, difficulty2: str) -> bool:
         """Check if two difficulty levels are adjacent (one step apart)"""

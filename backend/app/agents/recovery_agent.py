@@ -170,7 +170,7 @@ Example tone: "We noticed you were exploring Python recently. Why not pick up wh
         )
         
         # Build email
-        email_subject = f"We miss you, {user_name}! Your learning journey awaits 🎯"
+        email_subject = f"We miss you, {user_name}! Your learning journey awaits"
         email_body = self._build_recovery_email(
             user_name,
             recovery_narrative,

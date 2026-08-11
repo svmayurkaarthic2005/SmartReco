@@ -45,10 +45,12 @@ class BehaviorSummary:
     completion_counts: Dict[str, int] = field(default_factory=dict)  # category → number of lesson/module completions
     re_enrollment_events: int = 0
     re_enrolled_categories: List[str] = field(default_factory=list)
+    enrolled_categories: List[str] = field(default_factory=list)
     unenrollment_events: int = 0
     unenrolled_product_ids: List[str] = field(default_factory=list)
     unenrolled_product_titles: List[str] = field(default_factory=list)
     unenrolled_categories: List[str] = field(default_factory=list)
+    recent_event_types: List[str] = field(default_factory=list)  # Last 20 event type names
 
 
 class BehaviorAgent:
@@ -162,7 +164,8 @@ class BehaviorAgent:
         last_category: Optional[str] = None
         category_switch_count = 0
         
-        # Iterate through events to aggregate with recency weighting
+        # Sort events chronologically (oldest to newest) so state transitions and recency weighting apply in natural order
+        events = sorted(events, key=lambda e: e.timestamp)
         num_events = len(events)
         for idx, event in enumerate(events):
             event_type = event.event_type
@@ -230,13 +233,26 @@ class BehaviorAgent:
                     if product_obj.title in summary.recent_product_titles:
                         summary.recent_product_titles.remove(product_obj.title)
 
-                if is_enrollment:
-                    if product_obj.title in summary.enrolled_product_titles:
-                        summary.enrolled_product_titles.remove(product_obj.title)
-                    summary.enrolled_product_titles.insert(0, product_obj.title)
-                    
-                    if str(event.product_id) not in summary.enrolled_product_ids:
-                        summary.enrolled_product_ids.append(str(event.product_id))
+            if is_enrollment:
+                if c_title:
+                    if c_title in summary.enrolled_product_titles:
+                        summary.enrolled_product_titles.remove(c_title)
+                    summary.enrolled_product_titles.insert(0, c_title)
+                    if c_title in summary.unenrolled_product_titles:
+                        summary.unenrolled_product_titles.remove(c_title)
+
+                if event.product_id:
+                    pid_str = str(event.product_id)
+                    if pid_str not in summary.enrolled_product_ids:
+                        summary.enrolled_product_ids.append(pid_str)
+                    if pid_str in summary.unenrolled_product_ids:
+                        summary.unenrolled_product_ids.remove(pid_str)
+
+                if category:
+                    if category not in summary.enrolled_categories:
+                        summary.enrolled_categories.append(category)
+                    if category in summary.unenrolled_categories:
+                        summary.unenrolled_categories.remove(category)
 
             if is_unenrollment:
                 summary.unenrollment_events += 1
@@ -260,6 +276,8 @@ class BehaviorAgent:
                 if category:
                     if category not in summary.unenrolled_categories:
                         summary.unenrolled_categories.append(category)
+                    if category in summary.enrolled_categories:
+                        summary.enrolled_categories.remove(category)
                     summary.categories_explored[category] = 0
 
             # Track categories explored with intent weights and recency
@@ -275,9 +293,9 @@ class BehaviorAgent:
                         base_w = 25
                         summary.completion_counts[category] = summary.completion_counts.get(category, 0) + 1
                     elif is_re_enrollment:
-                        base_w = 60
+                        base_w = 400
                     elif is_enrollment:
-                        base_w = 50
+                        base_w = 300
                     elif event_type in (EventType.ADD_TO_CART, EventType.WISHLIST):
                         base_w = 5
                     elif event_type == EventType.VIEW_PRODUCT:

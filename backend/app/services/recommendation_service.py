@@ -14,8 +14,7 @@ import asyncio
 from typing import Optional
 from datetime import datetime, timedelta
 
-from sqlalchemy import select, insert
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy import select, insert, update
 from sqlalchemy.ext.asyncio import AsyncSession
 import redis.asyncio as redis
 
@@ -103,16 +102,26 @@ class RecommendationService:
         """
         # 1. Compute current event hash
         current_event_hash = await compute_event_hash(user_id, self.db)
+        print(f"[RECO-DEBUG] should_regenerate: current_event_hash={current_event_hash[:12]}...")
         
         # 2. Check cache (Redis or PostgreSQL)
         cached_data = await self._get_cached_data_dict(user_id)
         if not cached_data:
+            print(f"[RECO-DEBUG] should_regenerate: NO CACHE → regenerate=True")
             return True
         
         # 3. Check event hash match
         cached_event_hash = cached_data.get("event_hash", "")
         if cached_event_hash != current_event_hash:
             # User behavior changed → regenerate
+            # Also invalidate stale persona cache so it is reclassified fresh
+            try:
+                persona_key = f"persona:{user_id}"
+                await self.redis.delete(persona_key)
+                print(f"[RECO-DEBUG] should_regenerate: invalidated stale persona cache (key={persona_key})")
+            except Exception:
+                pass  # Best-effort; don't block regeneration
+            print(f"[RECO-DEBUG] should_regenerate: HASH MISMATCH (cached={cached_event_hash[:12]}...) → regenerate=True")
             return True
         
         # 4. Check timestamp (15 min expiration)
@@ -130,11 +139,14 @@ class RecommendationService:
                 
                 if age > self.cache_ttl:
                     # Stale cache → regenerate
+                    print(f"[RECO-DEBUG] should_regenerate: STALE (age={age:.0f}s > {self.cache_ttl}s) → regenerate=True")
                     return True
             except (ValueError, TypeError):
+                print(f"[RECO-DEBUG] should_regenerate: BAD TIMESTAMP → regenerate=True")
                 return True
         
         # Cache is valid
+        print(f"[RECO-DEBUG] should_regenerate: CACHE VALID → regenerate=False")
         return False
     
     async def get_or_generate(
@@ -153,6 +165,7 @@ class RecommendationService:
             if cached_data:
                 try:
                     output = self._deserialize_output(cached_data)
+                    print(f"[RECO-DEBUG] get_or_generate: returning CACHED result (generated_at={cached_data.get('generated_at')})")
                     return output
                 except (json.JSONDecodeError, KeyError, TypeError) as e:
                     logger.warning(f"Cache deserialization failed: {e}")
@@ -161,18 +174,23 @@ class RecommendationService:
         user_lock = await _get_user_lock(str(user_id))
         async with user_lock:
             # Re-check after acquiring lock (another coroutine may have just generated)
+            print(f"[RECO-DEBUG] get_or_generate: acquired lock, re-checking...")
             needs_regeneration = await self.should_regenerate(user_id)
             if not needs_regeneration:
                 cached_data = await self._get_cached_data_dict(user_id)
                 if cached_data:
                     try:
+                        print(f"[RECO-DEBUG] get_or_generate: returning CACHED result after lock re-check")
                         return self._deserialize_output(cached_data)
                     except Exception:
                         pass
             
             # Generate new recommendation
+            print(f"[RECO-DEBUG] get_or_generate: GENERATING FRESH recommendation...")
             runner = WorkflowRunner(db=self.db, redis_client=self.redis)
             output = await runner.run(user_id=user_id, user_name=user_name)
+            
+            print(f"[RECO-DEBUG] get_or_generate: GENERATED — titles={[p.title for p in output.ranked_products[:3]]}")
             
             # Store in all layers
             await self._store(user_id, output)
@@ -226,27 +244,36 @@ class RecommendationService:
         )
         self.db.add(recommendation)
         
-        # 2. Upsert into recommendation_cache table
+        # 2. Upsert into recommendation_cache table (cross-DB compatible)
         expires_at = datetime.utcnow() + timedelta(seconds=self.cache_ttl)
-        
-        stmt = pg_insert(RecommendationCache).values(
-            user_id=user_id,
-            event_hash=event_hash,
-            cached_recommendation=output_dict,
-            expires_at=expires_at
-        )
-        
-        # On conflict (user_id), update all fields
-        stmt = stmt.on_conflict_do_update(
-            index_elements=['user_id'],
-            set_={
-                'event_hash': stmt.excluded.event_hash,
-                'cached_recommendation': stmt.excluded.cached_recommendation,
-                'expires_at': stmt.excluded.expires_at
-            }
-        )
-        
-        await self.db.execute(stmt)
+
+        # Check if row exists for this user
+        existing_stmt = select(RecommendationCache).where(RecommendationCache.user_id == user_id)
+        existing_result = await self.db.execute(existing_stmt)
+        existing_entry = existing_result.scalar_one_or_none()
+
+        if existing_entry:
+            # Update existing row
+            update_stmt = (
+                update(RecommendationCache)
+                .where(RecommendationCache.user_id == user_id)
+                .values(
+                    event_hash=event_hash,
+                    cached_recommendation=output_dict,
+                    expires_at=expires_at
+                )
+            )
+            await self.db.execute(update_stmt)
+        else:
+            # Insert new row
+            new_cache = RecommendationCache(
+                user_id=user_id,
+                event_hash=event_hash,
+                cached_recommendation=output_dict,
+                expires_at=expires_at
+            )
+            self.db.add(new_cache)
+
         await self.db.commit()
         
         # 3. Set Redis cache with TTL (best effort, don't fail if Redis is unavailable)
@@ -308,13 +335,16 @@ class RecommendationService:
         try:
             from sqlalchemy import delete
             stmt = delete(RecommendationCache).where(RecommendationCache.user_id == user_id)
-            await self.db.execute(stmt)
+            result = await self.db.execute(stmt)
             await self.db.commit()
+            print(f"[RECO-DEBUG] invalidate_cache: deleted {result.rowcount} rows from recommendation_cache")
 
             cache_key = f"reco_cache:{user_id}"
             persona_key = f"persona:{user_id}"
-            await self.redis.delete(cache_key, persona_key)
+            deleted_count = await self.redis.delete(cache_key, persona_key)
+            print(f"[RECO-DEBUG] invalidate_cache: deleted {deleted_count} Redis keys ({cache_key}, {persona_key})")
         except Exception as e:
+            print(f"[RECO-DEBUG] invalidate_cache ERROR: {e}")
             logger.warning(f"Failed to delete cache for user {user_id}: {e}")
     
     def _serialize_output(
@@ -434,9 +464,9 @@ class RecommendationService:
                 email_body=recovery_data["email_body"],
             )
         
-        # Create output
+        # Create output — user_id kept as str (consistent with RecommendationOutput.user_id: str)
         output = RecommendationOutput(
-            user_id=uuid.UUID(data["user_id"]),
+            user_id=str(data["user_id"]),
             persona=data["persona"],
             confidence=data["confidence"],
             narrative_result=narrative_result,

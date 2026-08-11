@@ -19,12 +19,16 @@
 5. [Real-Time Telemetry & Dwell Time Mechanics](#5-real-time-telemetry--dwell-time-mechanics)
 6. [Multi-Layer Caching & MD5 Event Invalidation](#6-multi-layer-caching--md5-event-invalidation)
 7. [Database Schema & Data Layer](#7-database-schema--data-layer)
+8. [LangSmith Agent Tracing & Observability](#8-langsmith-agent-tracing--observability)
 
 ---
 
 ## 1. Executive Summary
 
 **SmartReco** is an enterprise-grade behavioral AI recommendation system designed for modern online learning platforms. Rather than relying on simple static recommendation queries or collaborative filtering alone, SmartReco captures real-time learner interactions (views, search queries, course enrollments, module completions, un-enrollments, scroll depths, and dynamic dwell times), processes them through a **7-agent LangGraph workflow**, retrieves grounded course candidates via **ChromaDB vector search**, and synthesizes personalized roadmaps using the **Mesh API LLM Gateway**.
+
+![SmartReco AI Recommendations Hub UI](images/frontend_recommendations_ui.png)
+*Learner AI Recommendations Interface showing persona classification, AI match confidence score, personalized journey narrative, and recommended learning path.*
 
 ---
 
@@ -193,3 +197,12 @@ SmartReco utilizes PostgreSQL managed via SQLAlchemy AsyncSession:
 - `events`: User interaction telemetry (views, enrollments, completions, un-enrollments, dwell times).
 - `recommendations`: Historical generated recommendations and structured roadmaps.
 - `recommendation_cache`: Cached JSON recommendation payloads keyed by user ID and event hash.
+
+---
+
+## 8. LangSmith Agent Tracing & Observability
+
+SmartReco integrates **LangSmith** end-to-end tracing ([langsmith_client.py](file:///c:/proj/SmartReco/smartreco/backend/app/observability/langsmith_client.py)) for complete observability across all 7 AI agents (`smartreco_workflow`, `behavior_analysis`, `persona_classification`, `recovery_detection`, `retrieval_planning`, `vector_retrieval`, `re_ranking`, `narrative_generation`).
+
+![LangSmith Agent Tracing Dashboard](images/langsmith_tracing.png)
+

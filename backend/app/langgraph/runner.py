@@ -91,13 +91,15 @@ class WorkflowRunner:
             },
             tags=["workflow", "parent"]
         ) as parent_run_id:
-            # Inject dependencies into workflow module (global context)
+            # Inject dependencies into workflow module (global context — kept for backward compat)
             workflow_module._db_session = self.db
             workflow_module._user_name = user_name
-            
-            # Initialize state with parent_run_id
+
+            # Initialize state with per-invocation DB session (thread-safe)
             initial_state: AgentState = {
                 "user_id": str(user_id),
+                "db": self.db,             # Per-invocation session — preferred by all nodes
+                "user_name": user_name,    # Per-invocation name — preferred by recovery_node
                 "behavior_summary": None,
                 "persona_result": None,
                 "retrieval_plan": None,
@@ -108,7 +110,7 @@ class WorkflowRunner:
                 "is_recovery_mode": False,
                 "error": None,
                 "trace_id": trace_id,
-                "parent_run_id": parent_run_id  # Add for child traces
+                "parent_run_id": parent_run_id
             }
             
             try:
@@ -204,11 +206,11 @@ class WorkflowRunner:
                 "trace_id": output.trace_id
             }
             
-            # Store with TTL (1 hour)
+            # Store with TTL (15 minutes — consistent with RecommendationService.cache_ttl)
             await self.redis_client.set(
                 cache_key,
                 json.dumps(cache_data),
-                ex=3600
+                ex=900
             )
             
             print(f"Cached recommendation for user {user_id}")

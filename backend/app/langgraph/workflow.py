@@ -1,6 +1,6 @@
 """LangGraph workflow for multi-agent recommendation system"""
 
-from typing import TypedDict, Optional, List, Annotated
+from typing import TypedDict, Optional, List, Annotated, Any
 from uuid import UUID
 import uuid
 from langgraph.graph import StateGraph, START, END
@@ -28,6 +28,7 @@ _user_name: str = "there"
 class AgentState(TypedDict):
     """State passed between workflow nodes"""
     user_id: str
+    db: Optional[Any]               # Per-invocation DB session (thread-safe)
     behavior_summary: Optional[BehaviorSummary]
     persona_result: Optional[PersonaResult]
     retrieval_plan: Optional[RetrievalPlan]
@@ -38,6 +39,7 @@ class AgentState(TypedDict):
     is_recovery_mode: bool
     error: Optional[str]
     trace_id: str
+    user_name: str                  # User display name, passed per-invocation
     parent_run_id: Optional[str]  # For LangSmith tracing
 
 
@@ -50,13 +52,14 @@ async def behavior_node(state: AgentState) -> dict:
     try:
         user_id = UUID(state["user_id"])
         parent_run_id = state.get("parent_run_id")
-        
+        db = state.get("db") or _db_session  # prefer per-invocation session
+
         # Instantiate agent
-        behavior_agent = BehaviorAgent(_db_session)
-        
+        behavior_agent = BehaviorAgent(db)
+
         # Analyze behavior (last 72 hours)
         summary = await behavior_agent.analyze(
-            user_id, 
+            user_id,
             lookback_hours=72,
             parent_run_id=parent_run_id
         )
@@ -115,15 +118,16 @@ async def recovery_check_node(state: AgentState) -> dict:
         
         user_id = UUID(state["user_id"])
         parent_run_id = state.get("parent_run_id")
-        
+        db = state.get("db") or _db_session  # prefer per-invocation session
+
         # Instantiate agent
         recovery_agent = RecoveryAgent()
-        
+
         # Detect risk
         is_at_risk = await recovery_agent.detect_risk(
             user_id,
             state["behavior_summary"],
-            _db_session,
+            db,
             parent_run_id=parent_run_id
         )
         
@@ -178,18 +182,137 @@ async def vector_retrieval_node(state: AgentState) -> dict:
             return {"error": "No retrieval plan available"}
         
         parent_run_id = state.get("parent_run_id")
-        
+        db = state.get("db") or _db_session  # prefer per-invocation session
+
         # Instantiate retrieval agent
         chroma = get_chroma_client()
         embeddings = get_embedding_service()
         retrieval_agent = VectorRetrievalAgent(chroma, embeddings)
-        
+
         # Retrieve candidates
         candidates = await retrieval_agent.retrieve(
             state["retrieval_plan"],
-            _db_session,
+            db,
             parent_run_id=parent_run_id
         )
+        
+        # DIVERSITY ENFORCEMENT: Ensure recommendations focus on ENROLLED categories only
+        # YouTube/Udemy style: recommend next steps in domains you're ACTIVELY LEARNING
+        # NOT random domains you just viewed/clicked
+        if state["behavior_summary"]:
+            enrolled_categories = getattr(state["behavior_summary"], 'enrolled_categories', [])
+            enrolled_ids = getattr(state["behavior_summary"], 'enrolled_product_ids', [])
+            
+            if enrolled_categories:
+                from collections import Counter
+                candidate_categories = Counter(c.category for c in candidates)
+                
+                # Define minimum courses per enrolled category based on total enrolled domains
+                if len(enrolled_categories) == 1:
+                    min_per_category = 5  # Single focus: get plenty of options
+                elif len(enrolled_categories) == 2:
+                    min_per_category = 3  # Two domains: 3 each = 6 total
+                elif len(enrolled_categories) == 3:
+                    min_per_category = 2  # Three domains: 2 each = 6 total
+                else:  # 4+ domains
+                    min_per_category = 2  # Four+ domains: 2 each = 8+ total
+                
+                # Check ALL enrolled categories (not just missing ones)
+                categories_needing_boost = []
+                for enrolled_cat in enrolled_categories:
+                    current_count = candidate_categories.get(enrolled_cat, 0)
+                    if current_count < min_per_category:
+                        categories_needing_boost.append((enrolled_cat, min_per_category - current_count))
+                
+                if categories_needing_boost:
+                    print(f"[DIVERSITY-FIX] Enrolled categories need boosting: {[(cat, needed) for cat, needed in categories_needing_boost]}")
+                    
+                    # Fetch and inject additional courses FROM ENROLLED CATEGORIES ONLY
+                    from uuid import UUID
+                    for category, needed_count in categories_needing_boost:
+                        stmt = select(Product).where(Product.category == category).limit(needed_count + 1)  # +1 for safety
+                        # Exclude already-enrolled courses
+                        if enrolled_ids:
+                            try:
+                                exclude_uuids = [UUID(pid) for pid in enrolled_ids]
+                                stmt = stmt.where(Product.id.notin_(exclude_uuids))
+                            except ValueError:
+                                pass
+                        
+                        # Also exclude products already in candidates
+                        existing_product_ids = {c.product_id for c in candidates}
+                        
+                        result = await db.execute(stmt)
+                        products_to_inject = result.scalars().all()
+                        
+                        injected_count = 0
+                        for product in products_to_inject:
+                            if str(product.id) not in existing_product_ids and injected_count < needed_count:
+                                from app.agents import CandidateProduct
+                                candidate = CandidateProduct(
+                                    product_id=str(product.id),
+                                    title=product.title,
+                                    description=product.description,
+                                    category=product.category,
+                                    difficulty=product.difficulty_level.value,
+                                    price=product.price,
+                                    tags=product.tags,
+                                    similarity_score=0.85  # High score to ensure they rank well
+                                )
+                                candidates.append(candidate)
+                                injected_count += 1
+                                print(f"[DIVERSITY-FIX] Injected {product.category} course: {product.title}")
+                    
+                    print(f"[DIVERSITY-FIX] Focused on {len(enrolled_categories)} enrolled domains, Minimum per domain: {min_per_category}")
+                
+                # FILTER OUT non-enrolled categories for focused users (2+ enrollments)
+                # This ensures recommendations stay focused on active learning domains
+                if len(enrolled_categories) >= 2:
+                    # Keep only courses from enrolled categories + high-ranking other courses
+                    filtered_candidates = []
+                    other_category_candidates = []
+                    
+                    for c in candidates:
+                        if c.category in enrolled_categories:
+                            filtered_candidates.append(c)
+                        else:
+                            # Keep non-enrolled courses only if they have very high similarity (>0.9)
+                            if c.similarity_score >= 0.90:
+                                other_category_candidates.append(c)
+                    
+                    # Add top 2 non-enrolled courses (for serendipity)
+                    filtered_candidates.extend(sorted(other_category_candidates, key=lambda x: x.similarity_score, reverse=True)[:2])
+                    
+                    if len(filtered_candidates) < len(candidates):
+                        print(f"[DIVERSITY-FIX] Filtered to enrolled categories: {len(candidates)} → {len(filtered_candidates)} candidates")
+                        candidates = filtered_candidates
+                
+                # BALANCE CHECK: For multi-domain users (3+ enrolled categories), cap over-represented categories
+                if len(enrolled_categories) >= 3:
+                    # Recount after injections
+                    candidate_categories = Counter(c.category for c in candidates)
+                    
+                    # Cap: no enrolled category should have more than 2x the minimum
+                    max_per_enrolled_category = min_per_category * 2
+                    
+                    over_represented = [cat for cat in enrolled_categories 
+                                      if candidate_categories.get(cat, 0) > max_per_enrolled_category]
+                    
+                    if over_represented:
+                        print(f"[DIVERSITY-FIX] Capping over-represented categories to {max_per_enrolled_category} courses: {over_represented}")
+                        balanced_candidates = []
+                        
+                        for c in candidates:
+                            if c.category in over_represented:
+                                current_count = sum(1 for bc in balanced_candidates if bc.category == c.category)
+                                if current_count < max_per_enrolled_category:
+                                    balanced_candidates.append(c)
+                            else:
+                                balanced_candidates.append(c)
+                        
+                        candidates = balanced_candidates
+                        print(f"[DIVERSITY-FIX] Balanced to {len(candidates)} candidates")
+
         
         print(f"[{state['trace_id']}] Retrieved {len(candidates)} candidates")
         
@@ -218,17 +341,18 @@ async def ranking_node(state: AgentState) -> dict:
                     pass
 
         # Fallback 1: if no candidates were retrieved, fetch non-excluded products from DB
+        db = state.get("db") or _db_session  # prefer per-invocation session
         if not candidates:
             stmt = select(Product).order_by(Product.created_at.desc()).limit(12)
             if exclude_uuids:
                 stmt = stmt.where(Product.id.notin_(exclude_uuids))
-            result = await _db_session.execute(stmt)
+            result = await db.execute(stmt)
             db_products = result.scalars().all()
-            
+
             # If all DB products were excluded, fallback to all DB products
             if not db_products:
                 stmt_all = select(Product).order_by(Product.created_at.desc()).limit(12)
-                db_products = (await _db_session.execute(stmt_all)).scalars().all()
+                db_products = (await db.execute(stmt_all)).scalars().all()
 
             from app.agents import CandidateProduct
             candidates = [
@@ -254,10 +378,18 @@ async def ranking_node(state: AgentState) -> dict:
         
         parent_run_id = state.get("parent_run_id")
         
-        # Fetch full product metadata from database
+        # Fetch full product metadata from database for candidates AND enrolled products
         product_ids = [UUID(c.product_id) for c in candidates]
-        stmt = select(Product).where(Product.id.in_(product_ids))
-        result = await _db_session.execute(stmt)
+        enrolled_ids = []
+        if summary and hasattr(summary, 'enrolled_product_ids'):
+            for pid in summary.enrolled_product_ids:
+                try:
+                    enrolled_ids.append(UUID(pid))
+                except (ValueError, TypeError):
+                    pass
+        all_ids = list(set(product_ids + enrolled_ids))
+        stmt = select(Product).where(Product.id.in_(all_ids))
+        result = await db.execute(stmt)
         products_dict = {str(p.id): p for p in result.scalars().all()}
         
         # Instantiate ranking agent
@@ -273,15 +405,20 @@ async def ranking_node(state: AgentState) -> dict:
         )
 
         # Fallback 2: If ranking produced 0 valid products (e.g. all candidates were hard-clamped),
-        # convert non-dropped candidates to ranked products with baseline score 0.5
+        # convert non-dropped, non-enrolled candidates to ranked products with baseline score 0.5
         if not ranked and candidates:
             from app.agents import RankedProduct
             unenrolled_ids_set = {str(pid).lower() for pid in getattr(summary, 'unenrolled_product_ids', [])}
             unenrolled_titles_set = {t.lower() for t in getattr(summary, 'unenrolled_product_titles', [])}
+            enrolled_ids_set = {str(pid).lower() for pid in getattr(summary, 'enrolled_product_ids', [])}
+            enrolled_titles_set = {t.lower() for t in getattr(summary, 'enrolled_product_titles', [])}
             
             non_dropped = [
                 c for c in candidates
-                if str(c.product_id).lower() not in unenrolled_ids_set and c.title.lower() not in unenrolled_titles_set
+                if str(c.product_id).lower() not in unenrolled_ids_set
+                and c.title.lower() not in unenrolled_titles_set
+                and str(c.product_id).lower() not in enrolled_ids_set
+                and c.title.lower() not in enrolled_titles_set
             ]
             fallback_source = non_dropped if non_dropped else candidates
             
@@ -360,6 +497,7 @@ async def recovery_node(state: AgentState) -> dict:
             return {"error": "Missing behavior or persona data"}
         
         user_id = UUID(state["user_id"])
+        db = state.get("db") or _db_session  # prefer per-invocation session
         
         # For recovery mode, we still need some products to recommend
         # Use retrieval to get candidates
@@ -369,12 +507,12 @@ async def recovery_node(state: AgentState) -> dict:
         chroma = get_chroma_client()
         embeddings = get_embedding_service()
         retrieval_agent = VectorRetrievalAgent(chroma, embeddings)
-        candidates = await retrieval_agent.retrieve(plan, _db_session)
+        candidates = await retrieval_agent.retrieve(plan, db)
         
         # Rank them
         product_ids = [UUID(c.product_id) for c in candidates]
         stmt = select(Product).where(Product.id.in_(product_ids))
-        result = await _db_session.execute(stmt)
+        result = await db.execute(stmt)
         products_dict = {str(p.id): p for p in result.scalars().all()}
         
         ranking_agent = RankingAgent()
@@ -391,7 +529,7 @@ async def recovery_node(state: AgentState) -> dict:
             user_id,
             state["behavior_summary"],
             ranked,
-            user_name=_user_name
+            user_name=state.get("user_name") or _user_name  # prefer per-invocation name
         )
         
         print(f"[{state['trace_id']}] Recovery generated: {len(recovery.recovery_products)} products")

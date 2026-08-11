@@ -7,7 +7,15 @@
 
 ## 🏆 Hackathon Overview
 
-**SmartReco** is an intelligent e-learning recommendation platform built for the **SmartReco Build Challenge 2026**. It continuously observes user behavioral telemetry (page views, course enrollments, category browsing, search queries, lesson completions, un-enrollments, scroll depth, and dynamic dwell time), understands user intent via a 7-agent reasoning pipeline, retrieves catalog-grounded courses via vector RAG, and generates persuasive personalized learning roadmaps.
+**SmartReco** is an intelligent e-learning recommendation platform built for the **SmartReco Build Challenge 2026**. It continuously observes user behavioral telemetry (page views, course enrollments, category browsing, search queries, video module watches, lesson completions, un-enrollments, scroll depth, and dynamic dwell time), understands user intent via a 7-agent reasoning pipeline, retrieves catalog-grounded courses via vector RAG, and generates persuasive personalized learning roadmaps.
+
+---
+
+## 🖼️ User Interface Preview
+
+### 🖥️ Personalized AI Recommendation Hub
+![SmartReco AI Recommendations UI](docs/images/frontend_recommendations_ui.png)
+*Figure 1: SmartReco AI Recommendation Hub displaying real-time persona classification (`Career Switcher`), multi-domain skill progression narrative, 98% AI Match Confidence score, and structured learning path cards with direct lecture access.*
 
 ---
 
@@ -47,33 +55,76 @@ SmartReco orchestrates 7 specialized AI agents in an explicit state graph ([work
 
 ```mermaid
 graph TD
-    A["User Behavioral Events (Clicks, Views, Enroll, Unenroll)"] --> B["BehaviorAgent (Aggregation & Decay)"]
-    B --> C["PersonaAgent (Clustering)"]
+    A["User Behavioral Events (Clicks, Views, Enroll, Unenroll)"] --> B["BehaviorAgent (Telemetry & Intent Weights)"]
+    B --> C["PersonaAgent (Clustering & Confidence)"]
     B --> D["RecoveryAgent (Risk Check)"]
-    B --> E["RetrievalPlanner (Semantic Query)"]
+    B --> E["RetrievalPlanner (Semantic Query Construction)"]
     E --> F["VectorRetrievalAgent (ChromaDB + Embeddings)"]
-    F --> G["RankingAgent (6-Factor Scoring)"]
-    G --> H["NarrativeAgent (Mesh API LLM)"]
+    F --> G["RankingAgent (Multi-Factor Scoring & Penalties)"]
+    G --> H["NarrativeAgent (Mesh API LLM & Roadmap Generation)"]
     H --> I["Personalized AI Learning Recommendations UI"]
 ```
 
-1. **`BehaviorAgent`**: Ingests user telemetry events, computes recency-weighted category intent, applies instant un-enrollment category wipes, and tracks progression.
-2. **`PersonaAgent`**: Classifies users into 6 behavioral personas (*Explorer, Focused Builder, Career Switcher, Overwhelmed Learner, Price Sensitive, Drop-Off Risk*).
-3. **`RecoveryAgent`**: Detects churn signals, inactivity, and exit events to trigger engagement recovery mechanisms.
-4. **`RetrievalPlanner`**: Formulates intent-focused vector search queries while excluding enrolled and explicitly dropped courses.
-5. **`VectorRetrievalAgent`**: Executes semantic RAG searches via ChromaDB with SentenceTransformers (`all-MiniLM-L6-v2`) and PostgreSQL fallbacks.
-6. **`RankingAgent`**: Re-ranks candidate courses using a 6-factor mathematical formula:
-   $$\text{Final Score} = S_{\text{semantic}} \cdot 0.35 + S_{\text{difficulty}} \cdot 0.20 + S_{\text{progression}} \cdot 0.15 + S_{\text{price}} \cdot 0.10 + S_{\text{tags}} \cdot 0.10 + S_{\text{freshness}} \cdot 0.10 + \text{Boosts} - \text{Penalties}$$
-7. **`NarrativeAgent`**: Uses OpenAI Mesh API (`gpt-4o`) to generate custom learning goals, match explanations, and structured 3-step learning roadmaps aligned with top recommendations.
+---
+
+### 🔬 Agent Specifications & Exact Mathematical Formulas
+
+#### 1. `BehaviorAgent` ([behavior_agent.py](file:///c:/proj/SmartReco/smartreco/backend/app/agents/behavior_agent.py))
+Ingests user telemetry within a lookback window (default 72h) and calculates recency-weighted category intent scores.
+
+* **Recency Weight Multiplier:**
+  $$\text{recency\_weight} = 1.0 + \left(\frac{\text{idx} + 1}{\text{num\_events}}\right) \times 2.0 \quad (\text{Range: } 1.0\times \text{ to } 3.0\times)$$
+* **Event Base Weights:**
+  * `VIEW_PRODUCT` = **`3 pts`**
+  * `ADD_TO_CART` / `WISHLIST` = **`5 pts`**
+  * `LESSON_COMPLETE` / `MODULE_COMPLETE` = **`20 pts`** (increments category `completion_counts`)
+  * `MODULE_WATCH` (watching tab video) = **`25 pts`** (increments category `completion_counts`)
+  * `ENROLL` = **`50 pts`**
+  * `RE_ENROLL` = **`60 pts`**
+  * `UNENROLL` = Resets active intent points `summary.categories_explored[category] = 0`
+* **Weighted Value Formula:**
+  $$\text{weighted\_val} = \text{round}(\text{base\_weight} \times \text{recency\_weight})$$
+
+#### 2. `PersonaAgent` ([persona_agent.py](file:///c:/proj/SmartReco/smartreco/backend/app/agents/persona_agent.py))
+Classifies users into 6 personas (*Explorer, Focused Builder, Career Switcher, Overwhelmed Learner, Price Sensitive, Drop-Off Risk*):
+
+* **Focused Builder Criteria:** Dominant category ratio $> 60\%$ (+2 pts) AND average dwell time $> 120\text{s}$ (+2 pts).
+* **Confidence Range:** Calculated as $\text{confidence} = \min(0.95, \max(0.60, \text{base\_confidence} + \text{boost}))$, bounded between **60% and 95%**.
+  * Total events $> 5$ or repeat visits $> 2$: **`+0.20 boost`**
+  * Active enrollments present: **`+0.20 boost`**
+  * Categories explored: **`+0.15 boost`**
+
+#### 3. `RetrievalPlanner` & `VectorRetrievalAgent` ([retrieval_agent.py](file:///c:/proj/SmartReco/smartreco/backend/app/agents/retrieval_agent.py))
+* Formulates semantic vector queries incorporating active enrolled courses, recently viewed titles, and top categories:
+  $$\text{"Next recommendations after viewing: <Title>. Domain focus: <Category>"}$$
+* Applies hard category filter when dominant category accounts for $\ge 40\%$ of total intent or $\ge 100$ points.
+* Performs RAG vector search via ChromaDB using `all-MiniLM-L6-v2` embeddings with SQL fallback.
+
+#### 4. `RankingAgent` ([ranking_agent.py](file:///c:/proj/SmartReco/smartreco/backend/app/agents/ranking_agent.py))
+Re-ranks candidate courses using a 6-factor formula combined with domain boosts and exclusion penalties:
+
+$$\text{Final Score} = S_{\text{semantic}} \cdot 0.35 + S_{\text{difficulty}} \cdot 0.20 + S_{\text{progression}} \cdot 0.15 + S_{\text{price}} \cdot 0.10 + S_{\text{tags}} \cdot 0.10 + S_{\text{freshness}} \cdot 0.10 + \text{Boosts} - \text{Penalties}$$
+
+* **Enrolled / Dominant Category Boost:** **`+0.40`**
+* **Learning Progression & Completion Boost:** **Up to `+0.30`**
+  $$\text{completion\_boost} = \min\left(0.30, 0.15 + \frac{\text{completions}}{\text{total\_completions}} \times 0.15\right)$$
+* **Already Enrolled Penalty:** **`-0.30`** (promotes next-step progression courses over owned courses)
+* **Dropped Category Penalty:** **`-0.35`**
+* **Dropped Course Hard Penalty:** **`-1.0`** (hard exclusion)
+
+#### 5. `NarrativeAgent` ([narrative_agent.py](file:///c:/proj/SmartReco/smartreco/backend/app/agents/narrative_agent.py))
+Uses OpenAI Mesh API (`gpt-4o`) to generate custom learning goals, match explanations, and structured 3-step learning roadmaps aligned with top recommendations.
 
 ---
 
 ## ⭐ Core Platform Features
 
 - **Dynamic AI Recommendation Engine**: Updates recommendations live based on enrollments, module completions, views, and dropped courses.
-- **Un-Enrollment Intent Reset**: Dropping a course instantly purges category dominance (`categories_explored = 0`) and applies a hard score clamp (`final_score = 0.0`) so un-enrolled tracks don't linger in recommendations.
-- **Interactive Course Learning Hub**: 15 distinct technology tracks featuring full HD 1080p embeddable YouTube video lectures, downloadable source code, and lecture notes across all 4 module levels.
-- **Real-Time Dwell Time & Route Telemetry**: Automatically measures exact dynamic dwell time on page visits (`RouteTracker`) and logs user navigation shifts to PostgreSQL.
+- **Dual-Layer Un-Enrollment Reset**:
+  1. *Behavioral Intent Reset*: Clears active category intent score (`categories_explored[category] = 0`).
+  2. *Hard Penalty*: Applies `-1.0` hard penalty to the dropped course ID and `-0.35` penalty to the dropped category.
+- **Interactive Course Learning Hub**: 15 technology tracks featuring 100% active, embeddable YouTube video lectures, downloadable source code, and module progress checklists across 56 video slots.
+- **Real-Time Dwell Time & Route Telemetry**: Automatically measures dynamic dwell time on page visits (`RouteTracker`) and logs user navigation events.
 - **Multi-Layer Cache & Lock Management**: Combines Redis in-memory key storage with PostgreSQL `recommendation_cache` and event-hash invalidation (`compute_event_hash`).
 
 ---
@@ -86,6 +137,12 @@ graph TD
 | ⭐ **Scheduled Proactive Delivery** | Background **APScheduler** jobs ([scheduler.py](file:///c:/proj/SmartReco/smartreco/backend/app/scheduler/scheduler.py)) send scheduled email recommendation digests based on user activity. |
 | ⭐ **Observability** | Integrated **LangSmith** end-to-end tracing ([langsmith_client.py](file:///c:/proj/SmartReco/smartreco/backend/app/observability/langsmith_client.py)) to monitor agent execution nodes, prompts, and latencies. |
 | ⭐ **Retrieval Polish** | 6-factor mathematical re-ranking formula combining Semantic Vector Similarity, Difficulty Level Alignment, Learning Progression, Price/Budget Fit, Tag Overlap, Freshness, and Domain Category Boost. |
+
+### 📊 LangSmith Agent Tracing & Observability Dashboard
+
+SmartReco includes full **LangSmith** integration ([langsmith_client.py](file:///c:/proj/SmartReco/smartreco/backend/app/observability/langsmith_client.py)) to trace all 7 agent execution steps (`smartreco_workflow`, `behavior_analysis`, `persona_classification`, `recovery_detection`, `retrieval_planning`, `vector_retrieval`, `re_ranking`, `narrative_generation`), monitoring inputs/outputs, latencies, and token costs in real time:
+
+![LangSmith Agent Tracing Dashboard](docs/images/langsmith_tracing.png)
 
 ---
 

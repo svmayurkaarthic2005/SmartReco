@@ -143,12 +143,15 @@ export const RecommendationsPage = () => {
     setRefreshing(true)
     setError(null)
     try {
+      console.log('[REFRESH] Calling POST /recommendations/refresh...')
       const freshData = await refreshRecommendations()
+      console.log('[REFRESH] Got fresh data:', freshData?.ranked_products?.map((p: any) => p.title))
       setRecommendation(freshData)
       setError(null)
       const freshHistory = await getHistory(5).catch(() => [])
       setHistory(freshHistory)
     } catch (err: any) {
+      console.error('[REFRESH] Error:', err?.response?.status, err?.response?.data || err?.message)
       if (!recommendation) {
         setError('Failed to refresh recommendations. Please try again.')
       }

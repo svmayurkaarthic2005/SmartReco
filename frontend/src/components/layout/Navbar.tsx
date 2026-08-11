@@ -77,14 +77,21 @@ export const Navbar = () => {
           </div>
 
           {/* User profile & actions */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-3 pl-3 border-l border-gray-200">
-              <div className="text-right hidden sm:block">
-                <div className="text-sm font-bold text-gray-900 leading-tight">{user?.name}</div>
-                <div className="text-[11px] text-gray-500 font-medium capitalize">{user?.role || 'Learner'}</div>
+          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+            <div className="flex items-center gap-2 sm:gap-3 pl-2 sm:pl-4 border-l border-gray-200">
+              <div 
+                className="text-right hidden sm:block max-w-[120px] md:max-w-[160px] lg:max-w-[220px]" 
+                title={user?.name || ''}
+              >
+                <div className="text-sm font-bold text-gray-900 leading-tight truncate whitespace-nowrap">
+                  {user?.name}
+                </div>
+                <div className="text-[11px] text-gray-500 font-medium capitalize truncate whitespace-nowrap">
+                  {user?.role || 'Learner'}
+                </div>
               </div>
 
-              <div className="relative">
+              <div className="relative flex-shrink-0">
                 <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-tr from-primary-600 to-indigo-600 rounded-2xl flex items-center justify-center text-white font-extrabold text-sm shadow-sm ring-2 ring-primary-100">
                   {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
                 </div>
@@ -93,7 +100,7 @@ export const Navbar = () => {
 
               <button
                 onClick={() => logout()}
-                className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all flex-shrink-0"
                 title="Log out"
               >
                 <HiLogout className="w-5 h-5" />
